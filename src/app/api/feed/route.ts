@@ -4,7 +4,8 @@ import { fetchOembed } from "@/lib/tiktok";
 import type { VideoItem } from "@/lib/types";
 
 export const runtime = "nodejs";
-export const revalidate = 600;
+export const dynamic = "force-dynamic";
+export const maxDuration = 30;
 
 async function mapLimit<T, R>(list: T[], limit: number, fn: (x: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array(list.length);
@@ -22,10 +23,11 @@ async function mapLimit<T, R>(list: T[], limit: number, fn: (x: T) => Promise<R>
 /**
  * GET /api/feed — каталог из data/videos.json.
  * Каждая ссылка проверяется официальным oEmbed TikTok; недоступные ролики отбрасываются.
+ * Ответ кэшируется на CDN (s-maxage) — повторные открытия сайта не ждут TikTok.
  */
 export async function GET() {
   const urls = (catalog.videos as string[]).filter((u) => typeof u === "string" && u.trim());
-  const results = await mapLimit(urls, 4, async (url) => ({ url, r: await fetchOembed(url) }));
+  const results = await mapLimit(urls, 10, async (url) => ({ url, r: await fetchOembed(url) }));
 
   const seen = new Set<string>();
   const items: VideoItem[] = [];
@@ -37,5 +39,13 @@ export async function GET() {
       items.push(r.item);
     }
   }
-  return NextResponse.json({ source: "tiktok-oembed", items, skipped });
+  return NextResponse.json(
+    { source: "tiktok-oembed", items, skipped },
+    {
+      headers: {
+        // пустой ответ (например, TikTok временно недоступен) не кэшируем
+        "Cache-Control": items.length ? "public, s-maxage=600, stale-while-revalidate=86400" : "no-store",
+      },
+    },
+  );
 }

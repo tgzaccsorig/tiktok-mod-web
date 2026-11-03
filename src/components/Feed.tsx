@@ -1,7 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { loadCatalogCache, saveCatalogCache, useStore } from "@/hooks/useStore";
+import {
+  loadCatalogCache,
+  loadCustomCache,
+  loadDiscoveredCache,
+  saveCatalogCache,
+  saveCustomCache,
+  saveDiscoveredCache,
+  useStore,
+} from "@/hooks/useStore";
 import { clampIndex, decideSwipe, needsMore, nextPass, playerIndexes, toSlides, visibleIndexes } from "@/lib/feedEngine";
 import { buildPass } from "@/lib/recommend";
 import { normalizeUrl } from "@/lib/tiktok";
@@ -41,12 +49,15 @@ export default function Feed() {
   const [customItems, setCustomItems] = useState<VideoItem[]>([]);
   const [customLoaded, setCustomLoaded] = useState(false);
   const [removed, setRemoved] = useState<string[]>([]);
+  const [discovered, setDiscovered] = useState<VideoItem[]>([]);
+  const [discoverInfo, setDiscoverInfo] = useState<{ configured: boolean; intervalMin: number } | null>(null);
 
   const [queue, setQueue] = useState<Slide[]>([]);
   const [index, setIndex] = useState(0);
   const [playback, setPlayback] = useState<Playback>("loading");
   const [unlocked, setUnlocked] = useState(false);
   const [needsTap, setNeedsTap] = useState(false);
+  const [nextReady, setNextReady] = useState(false);
   const [reloads, setReloads] = useState<Record<string, number>>({});
   const [sheet, setSheet] = useState(false);
   const [nonce, setNonce] = useState(0);
@@ -74,15 +85,17 @@ export default function Feed() {
   const sheetRef = useRef(false);
   const confirmedRef = useRef(false);
   const playedRef = useRef(new Set<string>());
+  const readyRef = useRef(new Set<string>());
+  const mutedState = useRef(new Map<string, boolean>());
+  const soundFixed = useRef(new Set<string>());
   const fallbackRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const wasPlayingRef = useRef(false);
   const priorityRef = useRef<string[]>([]);
   const reloadCountRef = useRef<Record<string, number>>({});
-  // Параметры iframe фиксируются при первом показе слайда: смена src перезагрузила бы плеер.
-  const autoplayKeys = useRef(new Set<string>());
+  // Параметры iframe фиксируются, пока плеер смонтирован: смена src перезагрузила бы его.
   const srcOpts = useRef(new Map<string, { muted: boolean; loop: boolean }>());
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const gesture = useRef<{ id: number; y0: number; t0: number; dy: number; lockedAtDown: boolean } | null>(null);
+  const gesture = useRef<{ id: number; y0: number; t0: number; dy: number; first: boolean } | null>(null);
 
   storeRef.current = store;
   modeRef.current = mode;
@@ -94,11 +107,11 @@ export default function Feed() {
 
   const pool = useMemo(() => {
     const map = new Map<string, VideoItem>();
-    [...catalog, ...customItems].forEach((v) => {
+    [...catalog, ...discovered, ...customItems].forEach((v) => {
       if (!map.has(v.id) && !removed.includes(v.id)) map.set(v.id, v);
     });
     return Array.from(map.values());
-  }, [catalog, customItems, removed]);
+  }, [catalog, discovered, customItems, removed]);
   poolRef.current = pool;
 
   const showToast = useCallback((msg: string) => {
@@ -107,14 +120,16 @@ export default function Feed() {
     toastTimer.current = setTimeout(() => setToast(null), 2200);
   }, []);
 
-  /* ---------- загрузка каталога (официальный oEmbed через /api/feed) ---------- */
+  /* ---------- каталог: мгновенно из кэша, свежий — в фоне (официальный oEmbed через /api/feed) ---------- */
   const loadCatalog = useCallback(async () => {
     try {
       const res = await fetch("/api/feed");
       if (!res.ok) throw new Error(String(res.status));
       const data = (await res.json()) as { items: VideoItem[] };
-      setCatalog(data.items);
-      saveCatalogCache(data.items);
+      if (data.items.length > 0) {
+        setCatalog(data.items);
+        saveCatalogCache(data.items);
+      }
       setCatalogState("ready");
     } catch {
       const cached = loadCatalogCache<VideoItem[]>();
@@ -122,43 +137,103 @@ export default function Feed() {
         setCatalog(cached);
         setCatalogState("ready");
       } else {
-        setCatalogState("error");
+        setCatalogState((s) => (s === "ready" ? s : "error"));
       }
     }
   }, []);
 
   useEffect(() => {
+    const cached = loadCatalogCache<VideoItem[]>();
+    if (cached && cached.length) {
+      setCatalog(cached);
+      setCatalogState("ready");
+    }
+    const found = loadDiscoveredCache<VideoItem[]>();
+    if (found && found.length) setDiscovered(found);
     loadCatalog();
   }, [loadCatalog]);
 
-  /* ---------- ролики, добавленные пользователем ---------- */
+  /* ---------- ролики, добавленные пользователем: из кэша сразу, недостающие — по сети в фоне ---------- */
   useEffect(() => {
     if (!ready) return;
     let cancelled = false;
+    const urls = storeRef.current.custom;
+    const cached = (loadCustomCache<VideoItem[]>() ?? []).filter((v) => urls.includes(v.url));
+    setCustomItems(cached);
+    const missing = urls.filter((u) => !cached.some((v) => v.url === u));
+    if (missing.length === 0 || cached.length > 0) setCustomLoaded(true);
+
     (async () => {
-      const urls = storeRef.current.custom;
-      const out: VideoItem[] = [];
-      for (const url of urls) {
+      const fetched: VideoItem[] = [];
+      for (const url of missing) {
         try {
           const r = await fetch(`/api/oembed?url=${encodeURIComponent(url)}`);
           const j = (await r.json()) as { ok: boolean; item?: VideoItem };
-          if (j.ok && j.item) out.push(j.item);
+          if (j.ok && j.item) fetched.push(j.item);
         } catch {
           /* пропускаем */
         }
       }
-      if (!cancelled) {
-        setCustomItems(out);
-        setCustomLoaded(true);
-      }
+      if (cancelled) return;
+      if (fetched.length) setCustomItems((c) => [...c, ...fetched.filter((f) => !c.some((x) => x.id === f.id))]);
+      setCustomLoaded(true);
     })();
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
 
+  useEffect(() => {
+    if (customLoaded) saveCustomCache(customItems);
+  }, [customItems, customLoaded]);
+
+  /* ---------- автопополнение: новые ролики подмешиваются в ленту сразу после следующего ---------- */
+  const injectFresh = useCallback((fresh: VideoItem[]) => {
+    const m = modeRef.current;
+    if (m === "favorites" || m === "history" || queueRef.current.length === 0) return;
+    const inQueue = new Set(queueRef.current.map((s) => s.item.id));
+    const fits = fresh.filter(
+      (v) => !inQueue.has(v.id) && (m === "foryou" || m === "random" || v.categories.includes(m)),
+    );
+    if (!fits.length) return;
+    const slides: Slide[] = fits.slice(0, 10).map((item) => ({ key: `${item.id}#f`, item, cycle: 0 }));
+    const at = Math.min(indexRef.current + 2, queueRef.current.length);
+    const q = [...queueRef.current.slice(0, at), ...slides, ...queueRef.current.slice(at)];
+    queueRef.current = q;
+    setQueue(q);
+  }, []);
+
+  const loadDiscovered = useCallback(async () => {
+    if (document.hidden) return;
+    try {
+      const res = await fetch("/api/discover");
+      if (!res.ok) return;
+      const data = (await res.json()) as { configured: boolean; intervalMin: number; items: VideoItem[] };
+      setDiscoverInfo({ configured: data.configured, intervalMin: data.intervalMin });
+      const known = new Set(poolRef.current.map((v) => v.id));
+      const fresh = data.items.filter((v) => !known.has(v.id));
+      if (!fresh.length) return;
+      setDiscovered((prev) => {
+        const next = [...prev, ...fresh].slice(-300);
+        saveDiscoveredCache(next);
+        return next;
+      });
+      if (queueRef.current.length === 0) setNonce((n) => n + 1);
+      else injectFresh(fresh);
+      showToast(`Новые ролики: +${fresh.length}`);
+    } catch {
+      /* сеть недоступна — попробуем в следующий раз */
+    }
+  }, [injectFresh, showToast]);
+
   const bootstrapped = ready && catalogState !== "loading" && customLoaded;
+
+  useEffect(() => {
+    if (!bootstrapped) return;
+    loadDiscovered();
+    const t = setInterval(loadDiscovered, 5 * 60 * 1000);
+    return () => clearInterval(t);
+  }, [bootstrapped, loadDiscovered]);
 
   /* ---------- низкоуровневые функции плеера ---------- */
   const post = useCallback((key: string, type: string, value?: unknown) => {
@@ -181,6 +256,20 @@ export default function Feed() {
     el.style.transform = `translate3d(0, calc(${-indexRef.current * 100}% + ${px}px), 0)`;
   }, []);
 
+  /** Перезагружает плеер текущего ролика (с autoplay=1) — когда плеер молчит или нужен звук. */
+  const reloadCurrent = useCallback((muted: boolean) => {
+    const key = currentKeyRef.current;
+    if (!key) return;
+    const prev = srcOpts.current.get(key) ?? { muted, loop: !storeRef.current.settings.autoNext };
+    srcOpts.current.set(key, { ...prev, muted });
+    readyRef.current.delete(key);
+    mutedState.current.delete(key);
+    confirmedRef.current = false;
+    setNeedsTap(false);
+    setPlayback("loading");
+    setReloads((r) => ({ ...r, [key]: (r[key] ?? 0) + 1 }));
+  }, []);
+
   /** Запускает текущий ролик и гарантированно ставит на паузу все остальные. */
   const activate = useCallback(
     (key: string) => {
@@ -190,17 +279,25 @@ export default function Feed() {
       post(key, soundRef.current ? "unMute" : "mute");
       post(key, "play");
       clearTimeout(fallbackRef.current);
-      // Если плеер ещё не собран TikTok'ом и команда проигнорирована — перезагружаем его сразу с autoplay=1.
       fallbackRef.current = setTimeout(() => {
         if (confirmedRef.current || currentKeyRef.current !== key) return;
+        if (readyRef.current.has(key)) {
+          // плеер готов, но не играет (обычно запрет автозапуска) — просим коснуться экрана
+          setNeedsTap(true);
+          setPlayback("paused");
+          return;
+        }
+        // плеер вообще не ответил: одна перезагрузка, затем ошибка с кнопкой «Повторить»
         const n = reloadCountRef.current[key] ?? 0;
-        if (n >= 2) return;
+        if (n >= 1) {
+          setPlayback("error");
+          return;
+        }
         reloadCountRef.current[key] = n + 1;
-        autoplayKeys.current.add(key);
-        setReloads((r) => ({ ...r, [key]: n + 1 }));
-      }, 1600);
+        reloadCurrent(!soundRef.current);
+      }, 7000);
     },
-    [post],
+    [post, reloadCurrent],
   );
 
   /* ---------- сборка очереди ---------- */
@@ -218,7 +315,6 @@ export default function Feed() {
     queueRef.current = q;
     indexRef.current = 0;
     reloadCountRef.current = {};
-    if (q[0]) autoplayKeys.current.add(q[0].key);
     setQueue(q);
     setIndex(0);
     setPlayback("loading");
@@ -258,22 +354,47 @@ export default function Feed() {
     if (!currentKey) return;
     setNeedsTap(false);
     setPlayback("loading");
+    setNextReady(false);
     confirmedRef.current = false;
     if (progressRef.current) progressRef.current.style.transform = "scaleX(0)";
     activate(currentKey);
 
     const id = queueRef.current[indexRef.current]?.item.id;
-    const t = setTimeout(() => {
+    const tHistory = setTimeout(() => {
       if (!id) return;
       update((s) => ({ ...s, history: [...s.history, { id, ts: Date.now() }].slice(-300) }));
     }, 1500);
-    return () => clearTimeout(t);
+    // следующий ролик начинаем грузить, только когда текущий уже играет (или через 4 с),
+    // чтобы два тяжёлых плеера не делили канал на старте
+    const tNext = setTimeout(() => setNextReady(true), 4000);
+    return () => {
+      clearTimeout(tHistory);
+      clearTimeout(tNext);
+    };
   }, [currentKey, activate, update]);
 
-  /* первый жест пользователя разрешает звук */
   useEffect(() => {
-    if (currentKeyRef.current) post(currentKeyRef.current, unlocked && store.settings.sound ? "unMute" : "mute");
-  }, [unlocked, store.settings.sound, post]);
+    if (playback === "playing") setNextReady(true);
+  }, [playback]);
+
+  /* звук: включаем после настоящего жеста пользователя и проверяем, что плеер действительно размьютился */
+  useEffect(() => {
+    const key = currentKeyRef.current;
+    if (!key) return;
+    const wantSound = unlocked && store.settings.sound;
+    post(key, wantSound ? "unMute" : "mute");
+    if (!wantSound) return;
+    const t = setTimeout(() => {
+      if (currentKeyRef.current !== key || soundFixed.current.has(key)) return;
+      const opts = srcOpts.current.get(key);
+      // плеер загружен без звука и не подтвердил unMute → один раз перезагружаем его со звуком
+      if (opts?.muted && mutedState.current.get(key) !== false) {
+        soundFixed.current.add(key);
+        reloadCurrent(false);
+      }
+    }, 1000);
+    return () => clearTimeout(t);
+  }, [unlocked, store.settings.sound, post, reloadCurrent]);
 
   const dropVideo = useCallback(
     (id: string) => {
@@ -303,12 +424,16 @@ export default function Feed() {
 
       switch (d.type) {
         case "onPlayerReady":
+          readyRef.current.add(key);
           if (isCur) activate(key);
+          break;
+        case "onMute":
+          mutedState.current.set(key, !!d.value);
           break;
         case "onStateChange": {
           const v = d.value as number;
           if (!isCur) {
-            if (v === 1) post(key, "pause"); // защита: одновременно играет только один ролик
+            if (v === 1) post(key, "pause"); // предзагруженный ролик «прогрет» и сразу остановлен: играет только один
             break;
           }
           if (v === 1) {
@@ -382,13 +507,20 @@ export default function Feed() {
     if (needsTap || playbackRef.current !== "playing") {
       post(key, soundRef.current ? "unMute" : "mute");
       post(key, "play");
+      if (needsTap) {
+        // плеер не принял команду (автозапуск был запрещён) — по касанию перезагружаем его с autoplay
+        setTimeout(() => {
+          if (!confirmedRef.current && currentKeyRef.current === key) reloadCurrent(!storeRef.current.settings.sound);
+        }, 1200);
+      }
       setNeedsTap(false);
     } else {
       post(key, "pause");
       setPlayback("paused");
     }
-  }, [needsTap, post]);
+  }, [needsTap, post, reloadCurrent]);
 
+  /** Браузеры разрешают звук только после настоящего жеста: клик мыши, тап, клавиша (но не скролл и не колесо). */
   const unlock = useCallback(() => {
     if (!unlockedRef.current) {
       unlockedRef.current = true;
@@ -399,9 +531,15 @@ export default function Feed() {
   /* ---------- жесты: мышь и касания (Pointer Events) ---------- */
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
-    gesture.current = { id: e.pointerId, y0: e.clientY, t0: performance.now(), dy: 0, lockedAtDown: !unlockedRef.current };
+    gesture.current = {
+      id: e.pointerId,
+      y0: e.clientY,
+      t0: performance.now(),
+      dy: 0,
+      first: !unlockedRef.current && storeRef.current.settings.sound,
+    };
     e.currentTarget.setPointerCapture(e.pointerId);
-    unlock();
+    if (e.pointerType === "mouse") unlock(); // нажатие мыши — настоящий жест
     applyTransform(0, false);
   };
 
@@ -426,8 +564,10 @@ export default function Feed() {
     if (action === "next") go(1);
     else if (action === "prev") go(-1);
     else if (action === "tap") {
-      // первый тап включает звук, а не ставит на паузу
-      if (!g.lockedAtDown || playbackRef.current !== "playing") togglePlay();
+      unlock(); // тап — настоящий жест, звук разрешён
+      // первый тап только включает звук, а не ставит ролик на паузу
+      if (g.first && playbackRef.current === "playing") return;
+      togglePlay();
     } else applyTransform(0, true);
   };
 
@@ -441,7 +581,6 @@ export default function Feed() {
     const onWheel = (e: WheelEvent) => {
       if (sheetRef.current) return;
       e.preventDefault();
-      unlock();
       const now = Date.now();
       if (now - last > 200) acc = 0;
       last = now;
@@ -517,6 +656,15 @@ export default function Feed() {
 
   const setMode = (m: FeedMode) => update((s) => ({ ...s, category: m }));
 
+  const onSoundButton = () => {
+    if (!unlocked && store.settings.sound) {
+      unlock(); // звук включён в настройках, ждал только жеста
+      return;
+    }
+    update((s) => ({ ...s, settings: { ...s.settings, sound: !s.settings.sound } }));
+    unlock();
+  };
+
   const addLinks = async (text: string): Promise<AddResult[]> => {
     const urls = Array.from(new Set(text.split(/[\s,]+/).map(normalizeUrl).filter(Boolean)));
     const results: AddResult[] = [];
@@ -556,7 +704,7 @@ export default function Feed() {
   };
 
   /* ---------- отрисовка ---------- */
-  const players = new Set(playerIndexes(index, queue.length));
+  const players = new Set(playerIndexes(index, queue.length).filter((i) => i === index || nextReady));
   const visible = visibleIndexes(index, queue.length);
   const showSpinner = !!current && playback === "loading";
   const soundOn = unlocked && store.settings.sound;
@@ -568,20 +716,24 @@ export default function Feed() {
         {visible.map((i) => {
           const s = queue[i];
           const isCur = i === index;
-          if (!srcOpts.current.has(s.key)) {
+          const mount = players.has(i);
+          if (mount && !srcOpts.current.has(s.key)) {
+            // текущий ролик грузится со звуком (если он разрешён жестом), предзагружаемый — «прогревается» без звука
             srcOpts.current.set(s.key, {
-              muted: !(unlockedRef.current && store.settings.sound),
+              muted: !isCur || !(unlockedRef.current && store.settings.sound),
               loop: !store.settings.autoNext,
             });
+          } else if (!mount) {
+            srcOpts.current.delete(s.key);
           }
-          const opts = srcOpts.current.get(s.key)!;
+          const opts = srcOpts.current.get(s.key) ?? { muted: true, loop: true };
           return (
             <VideoSlide
               key={s.key}
               slide={s}
               position={i}
-              mountPlayer={players.has(i)}
-              autoplay={autoplayKeys.current.has(s.key)}
+              mountPlayer={mount}
+              autoplay
               muted={opts.muted}
               loop={opts.loop}
               reloadNonce={reloads[s.key] ?? 0}
@@ -621,10 +773,7 @@ export default function Feed() {
         <div className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-black/70 px-8 text-center">
           <p>Не удалось воспроизвести этот ролик.</p>
           <div className="flex gap-3">
-            <button
-              className="rounded-lg bg-brand-red px-4 py-2 font-semibold"
-              onClick={() => currentKey && setReloads((r) => ({ ...r, [currentKey]: (r[currentKey] ?? 0) + 1 }))}
-            >
+            <button className="rounded-lg bg-brand-red px-4 py-2 font-semibold" onClick={() => reloadCurrent(!soundRef.current)}>
               Повторить
             </button>
             <button className="rounded-lg bg-white/15 px-4 py-2" onClick={() => go(1)}>
@@ -633,10 +782,14 @@ export default function Feed() {
           </div>
         </div>
       )}
-      {current && playback === "playing" && !unlocked && store.settings.sound && (
-        <div className="pointer-events-none absolute left-1/2 top-24 z-30 -translate-x-1/2 rounded-full bg-black/60 px-4 py-2 text-sm">
-          Коснитесь экрана, чтобы включить звук
-        </div>
+      {current && !unlocked && store.settings.sound && (
+        <button
+          data-testid="sound-pill"
+          onClick={unlock}
+          className="absolute left-1/2 top-28 z-40 -translate-x-1/2 rounded-full bg-brand-red px-4 py-2 text-sm font-semibold shadow-lg"
+        >
+          🔇 Нажмите, чтобы включить звук
+        </button>
       )}
 
       {/* верхняя панель */}
@@ -647,14 +800,7 @@ export default function Feed() {
             <button aria-label="Обновить ленту" onClick={refresh} className="rounded-full p-2 hover:bg-white/10">
               <RefreshIcon />
             </button>
-            <button
-              aria-label="Звук"
-              onClick={() => {
-                unlock();
-                update((s) => ({ ...s, settings: { ...s.settings, sound: !s.settings.sound } }));
-              }}
-              className="rounded-full p-2 hover:bg-white/10"
-            >
+            <button aria-label="Звук" onClick={onSoundButton} className="rounded-full p-2 hover:bg-white/10">
               <VolumeIcon filled={soundOn} />
             </button>
             <button aria-label="Во весь экран" onClick={toggleFullscreen} className="rounded-full p-2 hover:bg-white/10">
@@ -763,7 +909,7 @@ export default function Feed() {
       )}
 
       {toast && (
-        <div className="pointer-events-none absolute left-1/2 top-28 z-50 -translate-x-1/2 rounded-full bg-white px-4 py-2 text-sm font-medium text-black">
+        <div className="pointer-events-none absolute left-1/2 top-44 z-50 -translate-x-1/2 rounded-full bg-white px-4 py-2 text-sm font-medium text-black">
           {toast}
         </div>
       )}
@@ -773,6 +919,7 @@ export default function Feed() {
         onClose={() => setSheet(false)}
         store={store}
         customItems={customItems}
+        discover={discoverInfo}
         onAdd={addLinks}
         onRemoveCustom={removeCustom}
         onClearHistory={() => update((s) => ({ ...s, history: [] }))}

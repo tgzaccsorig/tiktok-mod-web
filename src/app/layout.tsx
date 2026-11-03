@@ -19,6 +19,11 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ru">
+      <head>
+        {/* заранее открываем соединение с плеером TikTok — первый ролик стартует быстрее */}
+        <link rel="preconnect" href="https://www.tiktok.com" />
+        <link rel="dns-prefetch" href="https://www.tiktok.com" />
+      </head>
       <body>{children}</body>
     </html>
   );

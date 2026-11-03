@@ -51,21 +51,27 @@ export function useStore() {
   return [store, update, ready] as const;
 }
 
-const CATALOG_KEY = "tmw:catalog";
-
-export function saveCatalogCache(items: unknown) {
+/** Кэш в localStorage: каталог и добавленные пользователем ролики открываются мгновенно, без ожидания сети. */
+function saveCache(key: string, items: unknown) {
   try {
-    localStorage.setItem(CATALOG_KEY, JSON.stringify(items));
+    localStorage.setItem(key, JSON.stringify(items));
   } catch {
     /* ignore */
   }
 }
 
-export function loadCatalogCache<T>(): T | null {
+function loadCache<T>(key: string): T | null {
   try {
-    const raw = localStorage.getItem(CATALOG_KEY);
+    const raw = localStorage.getItem(key);
     return raw ? (JSON.parse(raw) as T) : null;
   } catch {
     return null;
   }
 }
+
+export const saveCatalogCache = (items: unknown) => saveCache("tmw:catalog", items);
+export const loadCatalogCache = <T,>() => loadCache<T>("tmw:catalog");
+export const saveDiscoveredCache = (items: unknown) => saveCache("tmw:discovered", items);
+export const loadDiscoveredCache = <T,>() => loadCache<T>("tmw:discovered");
+export const saveCustomCache =(items: unknown) => saveCache("tmw:custom-items", items);
+export const loadCustomCache = <T,>() => loadCache<T>("tmw:custom-items");

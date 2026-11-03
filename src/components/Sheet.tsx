@@ -11,6 +11,7 @@ type Props = {
   onClose: () => void;
   store: Store;
   customItems: VideoItem[];
+  discover: { configured: boolean; intervalMin: number } | null;
   onAdd: (text: string) => Promise<AddResult[]>;
   onRemoveCustom: (id: string) => void;
   onClearHistory: () => void;
@@ -112,6 +113,17 @@ export default function Sheet(p: Props) {
             </ul>
           </div>
         )}
+
+        <div className="mt-5 rounded-lg bg-white/5 p-3 text-sm" data-testid="discover-status">
+          <h3 className="mb-1 font-semibold text-neutral-300">Автопополнение ленты</h3>
+          {p.discover?.configured ? (
+            <p className="text-brand-cyan">✓ Включено: новая порция роликов подбирается каждые {p.discover.intervalMin} мин.</p>
+          ) : (
+            <p className="text-neutral-400">
+              Выключено. Чтобы включить, добавьте ключ поискового API в настройки Vercel (см. README).
+            </p>
+          )}
+        </div>
 
         <div className="mt-5 space-y-3 border-t border-white/10 pt-4">
           <h3 className="text-sm font-semibold text-neutral-300">Настройки воспроизведения</h3>
