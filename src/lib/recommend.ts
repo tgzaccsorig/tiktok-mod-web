@@ -90,5 +90,16 @@ export function buildPass(
     const firstIds = new Set(first.map((v) => v.id));
     list = [...first, ...list.filter((v) => !firstIds.has(v.id))];
   }
+
+  // Recommendations should prefer videos the viewer has not watched yet.
+  // Favorites and History are explicit library views, so keep their normal behavior.
+  if (mode !== "favorites" && mode !== "history" && ctx.history.length > 0) {
+    const watchedIds = new Set(ctx.history.map((entry) => entry.id));
+    const unseen = list.filter((video) => !watchedIds.has(video.id));
+    // If every available video has already been watched, allow a fresh cycle
+    // instead of leaving the feed empty. The current pass itself stays deduplicated.
+    if (unseen.length > 0) list = unseen;
+  }
+
   return list;
 }
