@@ -2,6 +2,8 @@ name: Verify and package
 on:
   push:
     branches: [feature/supabase-social]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
