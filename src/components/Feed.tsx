@@ -241,7 +241,7 @@ export default function Feed() {
       const [likesResult, favoritesResult, historyResult] = await Promise.all([
         supabase.from("likes").select("video_id").eq("user_id", accountUser.id),
         supabase.from("favorites").select("video_id").eq("user_id", accountUser.id),
-        supabase.from("watch_history").select("video_id,watched_at").eq("user_id", accountUser.id).order("watched_at", { ascending: false }).limit(300),
+        supabase.from("watch_history").select("video_id,watched_at").eq("user_id", accountUser.id).order("watched_at", { ascending: false }).limit(2000),
       ]);
       if (cancelled) return;
       if (likesResult.data || favoritesResult.data || historyResult.data) {
@@ -419,7 +419,7 @@ export default function Feed() {
     const id = queueRef.current[indexRef.current]?.item.id;
     const tHistory = setTimeout(() => {
       if (!id) return;
-      update((s) => ({ ...s, history: [...s.history.filter((entry) => entry.id !== id), { id, ts: Date.now() }].slice(-300) }));
+      update((s) => ({ ...s, history: [...s.history.filter((entry) => entry.id !== id), { id, ts: Date.now() }].slice(-2000) }));
       const supabase = getSupabase();
       if (accountUser && supabase) {
         void supabase.from("watch_history").insert({ user_id: accountUser.id, video_id: id, watched_at: new Date().toISOString() });
