@@ -89,6 +89,7 @@ export default function Feed() {
   const mutedState = useRef(new Map<string, boolean>());
   const soundFixed = useRef(new Set<string>());
   const fallbackRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const soundTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const wasPlayingRef = useRef(false);
   const priorityRef = useRef<string[]>([]);
   const reloadCountRef = useRef<Record<string, number>>({});
@@ -270,6 +271,31 @@ export default function Feed() {
     setReloads((r) => ({ ...r, [key]: (r[key] ?? 0) + 1 }));
   }, []);
 
+  /**
+   * Гарантирует звук у текущего ролика. Предзагруженный ролик «прогрет» с muted=1, и плеер часто игнорирует
+   * unMute без жеста внутри iframe — ролик играл бы немым. Поэтому для КАЖДОГО ролика (а не только при
+   * включении звука) проверяем подтверждение onMute=false и, если его нет, один раз перезагружаем плеер со звуком.
+   */
+  const ensureSound = useCallback(
+    (key: string) => {
+      clearTimeout(soundTimer.current);
+      if (!soundRef.current) return;
+      post(key, "unMute");
+      soundTimer.current = setTimeout(() => {
+        if (!soundRef.current || currentKeyRef.current !== key) return;
+        if (mutedState.current.get(key) === false) return; // звук подтверждён
+        const opts = srcOpts.current.get(key);
+        if (!opts?.muted || soundFixed.current.has(key)) {
+          post(key, "unMute"); // уже загружен со звуком — просто повторяем команду
+          return;
+        }
+        soundFixed.current.add(key);
+        reloadCurrent(false);
+      }, 900);
+    },
+    [post, reloadCurrent],
+  );
+
   /** Запускает текущий ролик и гарантированно ставит на паузу все остальные. */
   const activate = useCallback(
     (key: string) => {
@@ -278,6 +304,7 @@ export default function Feed() {
       });
       post(key, soundRef.current ? "unMute" : "mute");
       post(key, "play");
+      ensureSound(key);
       clearTimeout(fallbackRef.current);
       fallbackRef.current = setTimeout(() => {
         if (confirmedRef.current || currentKeyRef.current !== key) return;
@@ -297,7 +324,7 @@ export default function Feed() {
         reloadCurrent(!soundRef.current);
       }, 7000);
     },
-    [post, reloadCurrent],
+    [post, reloadCurrent, ensureSound],
   );
 
   /* ---------- сборка очереди ---------- */
@@ -377,24 +404,17 @@ export default function Feed() {
     if (playback === "playing") setNextReady(true);
   }, [playback]);
 
-  /* звук: включаем после настоящего жеста пользователя и проверяем, что плеер действительно размьютился */
+  /* звук: включили/выключили кнопкой или после жеста — применяем к текущему ролику */
   useEffect(() => {
     const key = currentKeyRef.current;
     if (!key) return;
-    const wantSound = unlocked && store.settings.sound;
-    post(key, wantSound ? "unMute" : "mute");
-    if (!wantSound) return;
-    const t = setTimeout(() => {
-      if (currentKeyRef.current !== key || soundFixed.current.has(key)) return;
-      const opts = srcOpts.current.get(key);
-      // плеер загружен без звука и не подтвердил unMute → один раз перезагружаем его со звуком
-      if (opts?.muted && mutedState.current.get(key) !== false) {
-        soundFixed.current.add(key);
-        reloadCurrent(false);
-      }
-    }, 1000);
-    return () => clearTimeout(t);
-  }, [unlocked, store.settings.sound, post, reloadCurrent]);
+    if (unlocked && store.settings.sound) ensureSound(key);
+    else {
+      clearTimeout(soundTimer.current);
+      post(key, "mute");
+    }
+    return () => clearTimeout(soundTimer.current);
+  }, [unlocked, store.settings.sound, post, ensureSound]);
 
   const dropVideo = useCallback(
     (id: string) => {
@@ -439,6 +459,7 @@ export default function Feed() {
           if (v === 1) {
             confirmedRef.current = true;
             playedRef.current.add(key);
+            if (soundRef.current && mutedState.current.get(key) !== false) ensureSound(key);
             clearTimeout(fallbackRef.current);
             setNeedsTap(false);
             setPlayback("playing");
@@ -476,7 +497,7 @@ export default function Feed() {
     };
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
-  }, [activate, post, go, dropVideo]);
+  }, [activate, post, go, dropVideo, ensureSound]);
 
   /* пауза, когда вкладка скрыта */
   useEffect(() => {
