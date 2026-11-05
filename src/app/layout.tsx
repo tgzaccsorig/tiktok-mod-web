@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "TikTok Mod Web",
-  description: "Вертикальная лента публичных видео TikTok в браузере — без регистрации.",
+  description: "Вертикальная лента публичных видео TikTok с профилями и сообществом.",
   manifest: "/manifest.webmanifest",
 };
 
