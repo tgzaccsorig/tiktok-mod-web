@@ -249,7 +249,7 @@ export default function Feed() {
           ...s,
           likes: Array.from(new Set([...s.likes, ...(likesResult.data ?? []).map((x: {video_id:string}) => x.video_id)])),
           favs: Array.from(new Set([...s.favs, ...(favoritesResult.data ?? []).map((x: {video_id:string}) => x.video_id)])),
-          history: [...s.history, ...(historyResult.data ?? []).map((x: {video_id:string;watched_at:string}) => ({ id:x.video_id, ts:Date.parse(x.watched_at) || Date.now() }))].slice(-300),
+          history: Array.from(new Map([...s.history, ...(historyResult.data ?? []).map((x: {video_id:string;watched_at:string}) => ({ id:x.video_id, ts:Date.parse(x.watched_at) || Date.now() }))].map((entry) => [entry.id, entry])).values()).slice(-300),
         }));
       }
     })();
@@ -419,7 +419,7 @@ export default function Feed() {
     const id = queueRef.current[indexRef.current]?.item.id;
     const tHistory = setTimeout(() => {
       if (!id) return;
-      update((s) => ({ ...s, history: [...s.history, { id, ts: Date.now() }].slice(-300) }));
+      update((s) => ({ ...s, history: [...s.history.filter((entry) => entry.id !== id), { id, ts: Date.now() }].slice(-300) }));
       const supabase = getSupabase();
       if (accountUser && supabase) {
         void supabase.from("watch_history").insert({ user_id: accountUser.id, video_id: id, watched_at: new Date().toISOString() });
