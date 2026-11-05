@@ -86,3 +86,23 @@ src/components/Feed.tsx     лента, жесты, управление пле�
 src/components/VideoSlide.tsx, Sheet.tsx, Icons.tsx
 tests/feed.test.ts
 ```
+
+
+## Аккаунты, профили и социальные функции (Supabase)
+
+Ветка `feature/supabase-social` добавляет регистрацию/вход через Supabase Auth, публичные профили с уникальными никнеймами, поиск пользователей, подписки, синхронизацию лайков, личное избранное и историю просмотров. Видеолента, алгоритм рекомендаций и локальный кэш остаются в проекте.
+
+### Настройка
+
+1. Создай проект Supabase.
+2. Открой SQL Editor и выполни целиком `supabase/schema.sql`.
+3. В Vercel → Project → Settings → Environment Variables добавь:
+   - `NEXT_PUBLIC_SUPABASE_URL` — Project URL.
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` — publishable/anon key.
+4. Повтори для Preview/Development при необходимости и сделай Redeploy.
+
+Используется только публичный anon/publishable key в браузере; service_role key добавлять нельзя. Таблицы защищены RLS: избранное и история приватны, пользователь может менять только собственный профиль и данные, подписка создаётся от имени вошедшего пользователя.
+
+### Тесты
+
+`npm test` запускает имеющиеся тесты алгоритма ленты и рекомендаций. `npm run build` проверяет production-сборку. Проверка реальной регистрации/почты и политик RLS требует настроенного проекта Supabase и тестового аккаунта.

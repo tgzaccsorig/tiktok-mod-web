@@ -26,6 +26,8 @@ import {
 } from "./Icons";
 import Sheet, { reasonLabel, type AddResult } from "./Sheet";
 import VideoSlide from "./VideoSlide";
+import AccountPanel from "./AccountPanel";
+import { getSupabase, type AccountIdentity } from "@/lib/supabase";
 
 type Playback = "loading" | "playing" | "paused" | "error";
 
@@ -64,6 +66,8 @@ export default function Feed() {
   const [nonce, setNonce] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
   const [isFs, setIsFs] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [accountUser, setAccountUser] = useState<AccountIdentity | null>(null);
 
   const mode = store.category;
   const currentKey = queue[index]?.key;
@@ -227,6 +231,30 @@ export default function Feed() {
       /* сеть недоступна — попробуем в следующий раз */
     }
   }, [injectFresh, showToast]);
+
+  useEffect(() => {
+    if (!accountUser) return;
+    const supabase = getSupabase();
+    if (!supabase) return;
+    let cancelled = false;
+    (async () => {
+      const [likesResult, favoritesResult, historyResult] = await Promise.all([
+        supabase.from("likes").select("video_id").eq("user_id", accountUser.id),
+        supabase.from("favorites").select("video_id").eq("user_id", accountUser.id),
+        supabase.from("watch_history").select("video_id,watched_at").eq("user_id", accountUser.id).order("watched_at", { ascending: false }).limit(300),
+      ]);
+      if (cancelled) return;
+      if (likesResult.data || favoritesResult.data || historyResult.data) {
+        update((s) => ({
+          ...s,
+          likes: Array.from(new Set([...s.likes, ...(likesResult.data ?? []).map((x: {video_id:string}) => x.video_id)])),
+          favs: Array.from(new Set([...s.favs, ...(favoritesResult.data ?? []).map((x: {video_id:string}) => x.video_id)])),
+          history: [...s.history, ...(historyResult.data ?? []).map((x: {video_id:string;watched_at:string}) => ({ id:x.video_id, ts:Date.parse(x.watched_at) || Date.now() }))].slice(-300),
+        }));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [accountUser?.id, update]);
 
   const bootstrapped = ready && catalogState !== "loading" && customLoaded;
 
@@ -392,6 +420,10 @@ export default function Feed() {
     const tHistory = setTimeout(() => {
       if (!id) return;
       update((s) => ({ ...s, history: [...s.history, { id, ts: Date.now() }].slice(-300) }));
+      const supabase = getSupabase();
+      if (accountUser && supabase) {
+        void supabase.from("watch_history").insert({ user_id: accountUser.id, video_id: id, watched_at: new Date().toISOString() });
+      }
     }, 1500);
     // следующий ролик начинаем грузить, только когда текущий уже играет (или через 4 с),
     // чтобы два тяжёлых плеера не делили канал на старте
@@ -400,7 +432,7 @@ export default function Feed() {
       clearTimeout(tHistory);
       clearTimeout(tNext);
     };
-  }, [currentKey, activate, update]);
+  }, [currentKey, activate, update, accountUser]);
 
   useEffect(() => {
     if (playback === "playing") setNextReady(true);
@@ -650,10 +682,18 @@ export default function Feed() {
   const toggleIn = (field: "likes" | "favs") => {
     if (!current) return;
     const id = current.id;
+    const wasActive = store[field].includes(id);
     update((s) => ({
       ...s,
       [field]: s[field].includes(id) ? s[field].filter((x) => x !== id) : [...s[field], id],
     }));
+    const supabase = getSupabase();
+    if (accountUser && supabase) {
+      const table = field === "likes" ? "likes" : "favorites";
+      void (wasActive
+        ? supabase.from(table).delete().eq("user_id", accountUser.id).eq("video_id", id)
+        : supabase.from(table).upsert({ user_id: accountUser.id, video_id: id }, { onConflict: "user_id,video_id" }));
+    }
   };
 
   const share = async () => {
@@ -837,6 +877,9 @@ export default function Feed() {
         <div className="flex items-center justify-between px-3">
           <span className="logo-glitch text-base font-extrabold tracking-tight">TikTok Mod Web</span>
           <div className="pointer-events-auto flex items-center gap-1">
+            <button aria-label="Профиль и аккаунт" onClick={() => setAccountOpen(true)} className="rounded-full px-2 py-1 text-lg hover:bg-white/10">
+              {accountUser ? "👤" : "♙"}
+            </button>
             <button aria-label="Обновить ленту" onClick={refresh} className="rounded-full p-2 hover:bg-white/10">
               <RefreshIcon />
             </button>
@@ -954,6 +997,11 @@ export default function Feed() {
         </div>
       )}
 
+      <AccountPanel
+        open={accountOpen}
+        onClose={() => setAccountOpen(false)}
+        onUserChange={setAccountUser}
+      />
       <Sheet
         open={sheet}
         onClose={() => setSheet(false)}
