@@ -21,15 +21,18 @@ export function clampIndex(i: number, len: number): number {
   return Math.min(Math.max(i, 0), len - 1);
 }
 
-/** Индексы слайдов, у которых смонтирован настоящий плеер: текущий + следующий (предзагрузка). */
+/** Сколько роликов вперёд предзагружаем (кроме текущего). */
+export const PRELOAD_AHEAD = 2;
+
+/** Индексы слайдов, у которых смонтирован настоящий плеер: текущий + два следующих (предзагрузка). */
 export function playerIndexes(index: number, len: number): number[] {
-  return [index, index + 1].filter((i) => i >= 0 && i < len);
+  return [index, index + 1, index + PRELOAD_AHEAD].filter((i) => i >= 0 && i < len);
 }
 
 /** Индексы слайдов, у которых рисуется только постер (дешёвый DOM). */
 export function visibleIndexes(index: number, len: number): number[] {
   const out: number[] = [];
-  for (let i = index - 1; i <= index + 2; i++) if (i >= 0 && i < len) out.push(i);
+  for (let i = index - 1; i <= index + PRELOAD_AHEAD; i++) if (i >= 0 && i < len) out.push(i);
   return out;
 }
 
@@ -51,5 +54,5 @@ export function nextPass(pass: VideoItem[], lastId: string | undefined, cycle: n
 
 /** Нужно ли подгружать продолжение ленты. */
 export function needsMore(index: number, len: number): boolean {
-  return len > 0 && index >= len - 2;
+  return len > 0 && index >= len - (PRELOAD_AHEAD + 1);
 }

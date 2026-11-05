@@ -58,6 +58,7 @@ export default function Feed() {
   const [unlocked, setUnlocked] = useState(false);
   const [needsTap, setNeedsTap] = useState(false);
   const [nextReady, setNextReady] = useState(false);
+  const [next2Ready, setNext2Ready] = useState(false);
   const [reloads, setReloads] = useState<Record<string, number>>({});
   const [sheet, setSheet] = useState(false);
   const [nonce, setNonce] = useState(0);
@@ -382,6 +383,7 @@ export default function Feed() {
     setNeedsTap(false);
     setPlayback("loading");
     setNextReady(false);
+    setNext2Ready(false);
     confirmedRef.current = false;
     if (progressRef.current) progressRef.current.style.transform = "scaleX(0)";
     activate(currentKey);
@@ -403,6 +405,13 @@ export default function Feed() {
   useEffect(() => {
     if (playback === "playing") setNextReady(true);
   }, [playback]);
+
+  /* второй ролик вперёд начинаем грузить, когда следующий уже ответил (или через 2,5 с после него) */
+  useEffect(() => {
+    if (!nextReady) return;
+    const t = setTimeout(() => setNext2Ready(true), 2500);
+    return () => clearTimeout(t);
+  }, [nextReady, currentKey]);
 
   /* звук: включили/выключили кнопкой или после жеста — применяем к текущему ролику */
   useEffect(() => {
@@ -446,6 +455,7 @@ export default function Feed() {
         case "onPlayerReady":
           readyRef.current.add(key);
           if (isCur) activate(key);
+          else if (key === queueRef.current[indexRef.current + 1]?.key) setNext2Ready(true);
           break;
         case "onMute":
           mutedState.current.set(key, !!d.value);
@@ -725,7 +735,16 @@ export default function Feed() {
   };
 
   /* ---------- отрисовка ---------- */
-  const players = new Set(playerIndexes(index, queue.length).filter((i) => i === index || nextReady));
+  // уже смонтированные (прогретые) плееры не выгружаем при листании; новые подключаем по очереди: +1, затем +2
+  const players = new Set(
+    playerIndexes(index, queue.length).filter(
+      (i) =>
+        i === index ||
+        srcOpts.current.has(queue[i].key) ||
+        (i === index + 1 && nextReady) ||
+        (i === index + 2 && next2Ready),
+    ),
+  );
   const visible = visibleIndexes(index, queue.length);
   const showSpinner = !!current && playback === "loading";
   const soundOn = unlocked && store.settings.sound;
