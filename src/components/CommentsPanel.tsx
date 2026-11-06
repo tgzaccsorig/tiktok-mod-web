@@ -70,13 +70,25 @@ export default function CommentsPanel({
     }
     setSending(true);
     setError("");
-    const { error: insertError } = await supabase
+    const { data: inserted, error: insertError } = await supabase
       .from("comments")
-      .insert({ video_id: video.id, user_id: user.id, content });
+      .insert({ video_id: video.id, user_id: user.id, content })
+      .select("id")
+      .single();
     setSending(false);
     if (insertError) {
       setError("Не удалось отправить комментарий. Проверь вход в аккаунт.");
       return;
+    }
+    if (video.ownerId && video.ownerId !== user.id && inserted?.id) {
+      // Уведомление не должно мешать отправке самого комментария.
+      await supabase.from("notifications").insert({
+        user_id: video.ownerId,
+        actor_id: user.id,
+        type: "comment",
+        video_id: video.id,
+        comment_id: inserted.id,
+      });
     }
     setText("");
     await load();
