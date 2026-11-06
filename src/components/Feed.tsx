@@ -1026,9 +1026,15 @@ export default function Feed() {
                 </p>
               )}
               <div className="flex gap-3">
-                <button className="rounded-lg bg-brand-red px-4 py-2 font-semibold" onClick={() => setSheet(true)}>
-                  Добавить видео
-                </button>
+                {mode === "subscriptions" ? (
+                  <button className="rounded-lg bg-brand-red px-4 py-2 font-semibold" onClick={() => setAccountOpen(true)}>
+                    Профиль и подписки
+                  </button>
+                ) : (
+                  <button className="rounded-lg bg-brand-red px-4 py-2 font-semibold" onClick={() => setSheet(true)}>
+                    Добавить видео
+                  </button>
+                )}
                 <button className="rounded-lg bg-white/15 px-4 py-2" onClick={refresh}>
                   Повторить
                 </button>
