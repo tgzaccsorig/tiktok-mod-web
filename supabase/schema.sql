@@ -76,14 +76,14 @@ create policy "Users create own likes" on public.likes for insert to authenticat
 create policy "Users delete own likes" on public.likes for delete to authenticated using ((select auth.uid()) = user_id);
 
 drop policy if exists "Favorites are private to owner" on public.favorites;
-create policy "Favorites are private to owner" on public.favorites for select using (auth.uid() = user_id);
+create policy "Favorites are private to owner" on public.favorites for select to authenticated using ((select auth.uid()) = user_id);
 drop policy if exists "Users manage own favorites" on public.favorites;
 drop policy if exists "Users create own favorites" on public.favorites;
 create policy "Users create own favorites" on public.favorites for insert to authenticated with check ((select auth.uid()) = user_id);\ndrop policy if exists "Users delete own favorites" on public.favorites;
 create policy "Users delete own favorites" on public.favorites for delete to authenticated using ((select auth.uid()) = user_id);
 
 drop policy if exists "History is private to owner" on public.watch_history;
-create policy "History is private to owner" on public.watch_history for select using (auth.uid() = user_id);
+create policy "History is private to owner" on public.watch_history for select to authenticated using ((select auth.uid()) = user_id);
 drop policy if exists "Users insert own history" on public.watch_history;
 drop policy if exists "Users insert own history" on public.watch_history;
 create policy "Users insert own history" on public.watch_history for insert to authenticated with check ((select auth.uid()) = user_id);
