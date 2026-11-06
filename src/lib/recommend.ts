@@ -51,10 +51,17 @@ export function rank(pool: VideoItem[], ctx: Ctx, rng: () => number = Math.rando
     return cat + aut + novelty + russianBoost + rng() * 1.5;
   };
 
-  return pool
+  const remaining = pool
     .map((v) => ({ v, s: score(v) }))
-    .sort((a, b) => b.s - a.s)
-    .map((x) => x.v);
+    .sort((a, b) => b.s - a.s);
+  const diversified: VideoItem[] = [];
+  while (remaining.length) {
+    const previousAuthor = diversified[diversified.length - 1]?.author;
+    const nextIndex = remaining.findIndex((item) => item.v.author !== previousAuthor);
+    const chosen = remaining.splice(nextIndex >= 0 ? nextIndex : 0, 1)[0];
+    diversified.push(chosen.v);
+  }
+  return diversified;
 }
 
 /** Один проход ленты для выбранного режима. */
@@ -67,6 +74,10 @@ export function buildPass(
 ): VideoItem[] {
   const byId = new Map(pool.map((v) => [v.id, v]));
   let list: VideoItem[];
+  const recentIds = new Set(ctx.history.slice(-50).map((item) => item.id));
+  const freshPool = pool.filter((video) => !recentIds.has(video.id));
+  // Не повторяем недавно просмотренное, пока есть другие ролики. Если каталог исчерпан — лента остаётся бесконечной.
+  const discoveryPool = freshPool.length ? freshPool : pool;
 
   if (mode === "favorites") {
     list = ctx.favs
@@ -87,14 +98,14 @@ export function buildPass(
       .filter((v) => !!v.publishedAt)
       .sort((a, b) => Date.parse(b.publishedAt ?? "") - Date.parse(a.publishedAt ?? ""));
   } else if (mode === "random") {
-    const russian = pool.filter(isRussianVideo);
-    const other = pool.filter((v) => !isRussianVideo(v));
+    const russian = discoveryPool.filter(isRussianVideo);
+    const other = discoveryPool.filter((v) => !isRussianVideo(v));
     list = [...shuffle(russian, rng), ...shuffle(other, rng)];
   } else if (mode === "foryou") {
-    list = rank(pool, ctx, rng);
+    list = rank(discoveryPool, ctx, rng);
   } else {
     list = rank(
-      pool.filter((v) => v.categories.includes(mode)),
+      discoveryPool.filter((v) => v.categories.includes(mode)),
       ctx,
       rng,
     );
