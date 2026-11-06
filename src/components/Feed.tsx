@@ -34,6 +34,7 @@ type Playback = "loading" | "playing" | "paused" | "error";
 
 const CHIPS: { id: FeedMode; label: string }[] = [
   { id: "foryou", label: "Для тебя" },
+  { id: "subscriptions", label: "Подписки" },
   { id: "random", label: "Случайные" },
   ...CATEGORIES.map((c) => ({ id: c.id as FeedMode, label: c.label })),
   { id: "favorites", label: "Избранное" },
@@ -43,6 +44,7 @@ const CHIPS: { id: FeedMode; label: string }[] = [
 const EMPTY_TEXT: Partial<Record<FeedMode, string>> = {
   favorites: "В избранном пока пусто. Нажмите на закладку у любого ролика.",
   history: "История пуста — посмотрите несколько роликов.",
+  subscriptions: "Здесь будут новые видео авторов, на которых вы подписались. Войдите и подпишитесь на авторов.",
 };
 
 export default function Feed() {
@@ -53,6 +55,7 @@ export default function Feed() {
   const [customLoaded, setCustomLoaded] = useState(false);
   const [removed, setRemoved] = useState<string[]>([]);
   const [discovered, setDiscovered] = useState<VideoItem[]>([]);
+  const [subscriptionItems, setSubscriptionItems] = useState<VideoItem[]>([]);
   const [discoverInfo, setDiscoverInfo] = useState<{ configured: boolean; intervalMin: number } | null>(null);
 
   const [queue, setQueue] = useState<Slide[]>([]);
@@ -113,11 +116,11 @@ export default function Feed() {
 
   const pool = useMemo(() => {
     const map = new Map<string, VideoItem>();
-    [...catalog, ...discovered, ...customItems].forEach((v) => {
+    [...subscriptionItems, ...catalog, ...discovered, ...customItems].forEach((v) => {
       if (!map.has(v.id) && !removed.includes(v.id)) map.set(v.id, v);
     });
     return Array.from(map.values());
-  }, [catalog, discovered, customItems, removed]);
+  }, [subscriptionItems, catalog, discovered, customItems, removed]);
   poolRef.current = pool;
 
   const showToast = useCallback((msg: string) => {
@@ -258,6 +261,66 @@ export default function Feed() {
     })();
     return () => { cancelled = true; };
   }, [accountUser?.id, update]);
+
+  useEffect(() => {
+    if (mode !== "subscriptions") return;
+    if (!accountUser) {
+      setSubscriptionItems([]);
+      return;
+    }
+    const supabase = getSupabase();
+    if (!supabase) {
+      setSubscriptionItems([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data: follows, error: followsError } = await supabase
+        .from("follows")
+        .select("following_id")
+        .eq("follower_id", accountUser.id);
+      if (cancelled) return;
+      if (followsError) {
+        setSubscriptionItems([]);
+        showToast("Не удалось загрузить подписки");
+        return;
+      }
+      const creatorIds = (follows ?? []).map((row: { following_id: string }) => row.following_id);
+      if (!creatorIds.length) {
+        setSubscriptionItems([]);
+        return;
+      }
+      const { data, error } = await supabase
+        .from("user_videos")
+        .select("video_id,video_url,author,author_url,title,hashtags,music,thumbnail,categories,created_at")
+        .in("user_id", creatorIds)
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (cancelled) return;
+      if (error) {
+        setSubscriptionItems([]);
+        showToast("Не удалось загрузить видео подписок");
+        return;
+      }
+      setSubscriptionItems((data ?? []).map((row: {
+        video_id: string; video_url: string; author: string; author_url: string;
+        title: string; hashtags: string[]; music: string | null; thumbnail: string | null;
+        categories: string[]; created_at: string;
+      }) => ({
+        id: row.video_id,
+        url: row.video_url,
+        author: row.author,
+        authorUrl: row.author_url,
+        title: row.title,
+        hashtags: row.hashtags ?? [],
+        music: row.music,
+        thumbnail: row.thumbnail,
+        categories: (row.categories ?? []) as VideoItem["categories"],
+        publishedAt: row.created_at,
+      })));
+    })();
+    return () => { cancelled = true; };
+  }, [mode, accountUser?.id, showToast]);
 
   const bootstrapped = ready && catalogState !== "loading" && customLoaded;
 
@@ -710,7 +773,10 @@ export default function Feed() {
     showToast("Лента обновлена");
   };
 
-  const setMode = (m: FeedMode) => update((s) => ({ ...s, category: m }));
+  const setMode = (m: FeedMode) => {
+    update((s) => ({ ...s, category: m }));
+    if (m === "subscriptions" && !accountUser) setAccountOpen(true);
+  };
 
   const onSoundButton = () => {
     if (!unlocked && store.settings.sound) {
