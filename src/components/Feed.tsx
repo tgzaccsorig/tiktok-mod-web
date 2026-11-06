@@ -11,7 +11,7 @@ import {
   useStore,
 } from "@/hooks/useStore";
 import { clampIndex, decideSwipe, needsMore, nextPass, playerIndexes, toSlides, visibleIndexes } from "@/lib/feedEngine";
-import { buildPass } from "@/lib/recommend";
+import { buildPass, isRussianVideo } from "@/lib/recommend";
 import { normalizeUrl } from "@/lib/tiktok";
 import { CATEGORIES, type FeedMode, type Slide, type VideoItem } from "@/lib/types";
 import {
@@ -197,7 +197,7 @@ export default function Feed() {
     if (m === "favorites" || m === "history" || queueRef.current.length === 0) return;
     const inQueue = new Set(queueRef.current.map((s) => s.item.id));
     const fits = fresh.filter(
-      (v) => !inQueue.has(v.id) && (m === "foryou" || m === "random" || v.categories.includes(m)),
+      (v) => !inQueue.has(v.id) && ((m === "foryou" || m === "random") ? isRussianVideo(v) : v.categories.includes(m)),
     );
     if (!fits.length) return;
     const slides: Slide[] = fits.slice(0, 10).map((item) => ({ key: `${item.id}#f`, item, cycle: 0 }));
