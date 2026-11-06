@@ -134,7 +134,11 @@ export default function AccountPanel({ open, onClose, onUserChange }: Props) {
         if (!/^[a-z0-9_]{3,24}$/.test(clean)) throw new Error("Никнейм: 3–24 символа, латиница, цифры или _.");
         const { data, error: authError } = await supabase.auth.signUp({
           email: email.trim(), password,
-          options: { data: { username: clean, display_name: displayName.trim() || clean } },
+          options: {
+            data: { username: clean, display_name: displayName.trim() || clean },
+            // Supabase must return to the current deployment, not the default localhost URL.
+            emailRedirectTo: typeof window !== "undefined" ? window.location.origin : undefined,
+          },
         });
         if (authError) throw authError;
         if (data.session?.user) {
