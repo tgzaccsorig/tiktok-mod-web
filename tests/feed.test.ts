@@ -119,7 +119,7 @@ test("режимы: категория, избранное, история, пр
   assert.deepEqual(buildPass("games", pool, ctx).map((v) => v.id), ["g1"]);
   assert.deepEqual(buildPass("favorites", pool, ctx).map((v) => v.id), ["g1", "a1"]);
   assert.deepEqual(buildPass("history", pool, ctx).map((v) => v.id), ["m1", "g1"]);
-  assert.equal(buildPass("random", pool, ctx).length, 3);
+  assert.deepEqual(buildPass("random", pool, ctx).map((v) => v.id), ["a1"]);
   assert.equal(buildPass("foryou", pool, ctx, Math.random, ["a1"])[0].id, "a1");
 });
 
