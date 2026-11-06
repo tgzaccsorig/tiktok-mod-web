@@ -202,7 +202,7 @@ export default function Feed() {
     if (m === "favorites" || m === "history" || queueRef.current.length === 0) return;
     const inQueue = new Set(queueRef.current.map((s) => s.item.id));
     const fits = fresh.filter(
-      (v) => !inQueue.has(v.id) && (m === "foryou" || m === "random" || v.categories.includes(m)),
+      (v) => !inQueue.has(v.id) && (m === "foryou" || m === "random" || CATEGORIES.some((category) => category.id === m && v.categories.includes(category.id))),
     );
     if (m === "foryou" || m === "random") {
       fits.sort((a, b) => Number(isRussianVideo(b)) - Number(isRussianVideo(a)));
