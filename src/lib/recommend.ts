@@ -109,11 +109,10 @@ export function buildPass(
   } else if (mode === "foryou") {
     list = rank(discoveryPool, ctx, rng);
   } else {
-    list = rank(
-      discoveryPool.filter((v) => v.categories.includes(mode)),
-      ctx,
-      rng,
-    );
+    const categoryPool = pool.filter((v) => v.categories.includes(mode));
+    const freshCategoryPool = categoryPool.filter((v) => !recentIds.has(v.id));
+    // Категория не должна становиться пустой только потому, что её ролики недавно смотрели.
+    list = rank(freshCategoryPool.length ? freshCategoryPool : categoryPool, ctx, rng);
   }
 
   if (priorityIds.length) {
