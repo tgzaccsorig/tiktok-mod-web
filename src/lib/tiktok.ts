@@ -35,9 +35,9 @@ export function extractHashtags(text: string): string[] {
 
 export function categorize(text: string): CategoryId[] {
   const words = new Set(text.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? []);
-  return CATEGORIES.filter((c) => c.keywords.some((k) => words.has(k))).map((c) => c.id);
+  const matches = CATEGORIES.filter((c) => c.id !== "other" && c.keywords.some((k) => words.has(k))).map((c) => c.id);
+  return matches.length ? matches : ["other"];
 }
-
 type OembedJson = {
   type?: string;
   title?: string;
