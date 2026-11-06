@@ -76,7 +76,7 @@ export function buildPass(
 ): VideoItem[] {
   const byId = new Map(pool.map((v) => [v.id, v]));
   let list: VideoItem[];
-  const recentIds = new Set(ctx.history.slice(-50).map((item) => item.id));
+  const recentIds = new Set(ctx.history.slice().sort((a, b) => b.ts - a.ts).slice(0, 50).map((item) => item.id));
   const freshPool = pool.filter((video) => !recentIds.has(video.id));
   // Не повторяем недавно просмотренное, пока есть другие ролики. Если каталог исчерпан — лента остаётся бесконечной.
   const discoveryPool = freshPool.length ? freshPool : pool;
