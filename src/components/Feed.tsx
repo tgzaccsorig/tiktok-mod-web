@@ -100,6 +100,7 @@ export default function Feed() {
   const soundTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const wasPlayingRef = useRef(false);
   const priorityRef = useRef<string[]>([]);
+  const accountOwnerRef = useRef<string | null>(null);
   const reloadCountRef = useRef<Record<string, number>>({});
   // Параметры iframe фиксируются, пока плеер смонтирован: смена src перезагрузила бы его.
   const srcOpts = useRef(new Map<string, { muted: boolean; loop: boolean }>());
@@ -239,28 +240,39 @@ export default function Feed() {
   }, [injectFresh, showToast]);
 
   useEffect(() => {
-    if (!accountUser) return;
+    const previousOwner = accountOwnerRef.current;
+    const nextOwner = accountUser?.id ?? null;
+    accountOwnerRef.current = nextOwner;
+
+    // Не переносим личные данные одного аккаунта в другой и не оставляем их после выхода.
+    if (!nextOwner) {
+      if (previousOwner) update((s) => ({ ...s, likes: [], favs: [], history: [] }));
+      return;
+    }
+
     const supabase = getSupabase();
     if (!supabase) return;
     let cancelled = false;
     (async () => {
       const [likesResult, favoritesResult, historyResult] = await Promise.all([
-        supabase.from("likes").select("video_id").eq("user_id", accountUser.id),
-        supabase.from("favorites").select("video_id").eq("user_id", accountUser.id),
-        supabase.from("watch_history").select("video_id,watched_at").eq("user_id", accountUser.id).order("watched_at", { ascending: false }).limit(300),
+        supabase.from("likes").select("video_id").eq("user_id", nextOwner),
+        supabase.from("favorites").select("video_id").eq("user_id", nextOwner),
+        supabase.from("watch_history").select("video_id,watched_at").eq("user_id", nextOwner).order("watched_at", { ascending: false }).limit(300),
       ]);
       if (cancelled) return;
-      if (likesResult.data || favoritesResult.data || historyResult.data) {
-        update((s) => ({
-          ...s,
-          likes: Array.from(new Set([...s.likes, ...(likesResult.data ?? []).map((x: {video_id:string}) => x.video_id)])),
-          favs: Array.from(new Set([...s.favs, ...(favoritesResult.data ?? []).map((x: {video_id:string}) => x.video_id)])),
-          history: [...s.history, ...(historyResult.data ?? []).map((x: {video_id:string;watched_at:string}) => ({ id:x.video_id, ts:Date.parse(x.watched_at) || Date.now() }))].slice(-300),
-        }));
+      if (likesResult.error || favoritesResult.error || historyResult.error) {
+        showToast("Не удалось полностью синхронизировать данные аккаунта");
+        return;
       }
+      update((s) => ({
+        ...s,
+        likes: Array.from(new Set((likesResult.data ?? []).map((x: {video_id:string}) => x.video_id))),
+        favs: Array.from(new Set((favoritesResult.data ?? []).map((x: {video_id:string}) => x.video_id))),
+        history: (historyResult.data ?? []).map((x: {video_id:string;watched_at:string}) => ({ id:x.video_id, ts:Date.parse(x.watched_at) || Date.now() })),
+      }));
     })();
     return () => { cancelled = true; };
-  }, [accountUser?.id, update]);
+  }, [accountUser?.id, update, showToast]);
 
   useEffect(() => {
     if (mode !== "subscriptions") return;
