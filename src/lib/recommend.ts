@@ -47,7 +47,7 @@ export function rank(pool: VideoItem[], ctx: Ctx, rng: () => number = Math.rando
     const cat = v.categories.reduce((s, c) => s + (catAff[c] ?? 0), 0);
     const aut = (authorAff[v.author] ?? 0) * 1.5;
     const novelty = seen[v.id] ? -Math.min(seen[v.id], 6) * 0.5 : 2;
-    const russianBoost = /[а-яё]/i.test(v.title + " " + v.hashtags.join(" ")) ? 3.5 : 0;
+    const russianBoost = isRussianVideo(v) ? 8 : 0;
     return cat + aut + novelty + russianBoost + rng() * 1.5;
   };
 
@@ -83,9 +83,11 @@ export function buildPass(
       .map((h) => byId.get(h.id))
       .filter((v): v is VideoItem => !!v);
   } else if (mode === "random") {
-    list = shuffle(pool.filter(isRussianVideo), rng);
+    const russian = pool.filter(isRussianVideo);
+    const other = pool.filter((v) => !isRussianVideo(v));
+    list = [...shuffle(russian, rng), ...shuffle(other, rng)];
   } else if (mode === "foryou") {
-    list = rank(pool.filter(isRussianVideo), ctx, rng);
+    list = rank(pool, ctx, rng);
   } else {
     list = rank(
       pool.filter((v) => v.categories.includes(mode)),
