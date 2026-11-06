@@ -47,7 +47,7 @@ const updates = [
 
 export default function UpdatesPage() {
   return (
-    <main className="min-h-dvh bg-black px-4 py-8 text-white sm:px-6">
+    <main className="h-dvh overflow-y-auto overscroll-y-contain touch-pan-y bg-black px-4 py-8 text-white sm:px-6">
       <div className="mx-auto w-full max-w-2xl">
         <Link
           href="/"
