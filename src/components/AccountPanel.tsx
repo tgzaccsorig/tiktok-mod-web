@@ -322,7 +322,7 @@ export default function AccountPanel({ open, onClose, onUserChange }: Props) {
               </>
             ) : (
               <div className="space-y-3">
-                <button className={buttonClass} onClick={() => setViewed(null)}>← Мой аккаунт</button>
+                <button className={buttonClass} onClick={() => { setViewed(null); void loadStats(user.id); void loadPublishedVideos(user.id); }}>← Мой аккаунт</button>
                 <div className="rounded-xl bg-white/5 p-4"><h3 className="text-lg font-bold">{viewed.display_name || viewed.username}</h3><p className="text-sm text-cyan-300">@{viewed.username}</p><p className="mt-2 whitespace-pre-wrap text-sm text-neutral-300">{viewed.bio || "Пользователь пока ничего не рассказал о себе."}</p><div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs"><Stat label="Подписчики" value={counts.followers}/><Stat label="Подписки" value={counts.following}/><Stat label="Лайки" value={counts.likes}/></div>{viewed.id !== user.id && <button className="mt-3 w-full rounded-lg bg-cyan-400 py-2 font-semibold text-black disabled:opacity-40" disabled={busy} onClick={toggleFollow}>{following ? "Отписаться" : "Подписаться"}</button>}</div>
                 <div className="space-y-2 border-t border-white/10 pt-3">
                   <h4 className="font-semibold">Публикации</h4>
