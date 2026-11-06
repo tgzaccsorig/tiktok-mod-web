@@ -39,7 +39,8 @@ export function rank(pool: VideoItem[], ctx: Ctx, rng: () => number = Math.rando
     const cat = v.categories.reduce((s, c) => s + (catAff[c] ?? 0), 0);
     const aut = (authorAff[v.author] ?? 0) * 1.5;
     const novelty = seen[v.id] ? -Math.min(seen[v.id], 6) * 0.5 : 2;
-    return cat + aut + novelty + rng() * 1.5;
+    const russianBoost = /[а-яё]/i.test(v.title + " " + v.hashtags.join(" ")) ? 3.5 : 0;
+    return cat + aut + novelty + russianBoost + rng() * 1.5;
   };
 
   return pool
