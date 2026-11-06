@@ -40,11 +40,13 @@ test("индекс не выходит за границы ленты", () => {
   assert.equal(clampIndex(3, 0), 0);
 });
 
-test("плеер монтируется только у текущего и следующего ролика", () => {
-  assert.deepEqual(playerIndexes(0, 10), [0, 1]);
-  assert.deepEqual(playerIndexes(8, 10), [8, 9]);
+test("тяжёлый iframe монтируется только у текущего ролика, соседи — постеры", () => {
+  assert.deepEqual(playerIndexes(0, 10), [0]);
+  assert.deepEqual(playerIndexes(8, 10), [8]);
   assert.deepEqual(playerIndexes(9, 10), [9]);
+  assert.deepEqual(playerIndexes(10, 10), []);
   assert.deepEqual(visibleIndexes(5, 10), [4, 5, 6]);
+  assert.deepEqual(visibleIndexes(0, 10), [0, 1]);
 });
 
 test("лента бесконечна: когда видео заканчиваются, добавляется новый проход без повтора подряд", () => {
