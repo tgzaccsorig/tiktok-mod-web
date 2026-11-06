@@ -132,6 +132,14 @@ test("Smart Feed откладывает недавно просмотренны�
   assert.ok(!random.some((video) => video.id === "recent"));
 });
 
+test("Smart Feed опускает видео, отмеченные как «Не интересно»", () => {
+  const pool = [mk("hidden"), mk("normal")];
+  const out = buildPass("foryou", pool, { likes: [], favs: [], history: [], notInterested: ["hidden"] });
+  assert.equal(out[out.length - 1].id, "hidden");
+  const random = buildPass("random", pool, { likes: [], favs: [], history: [], notInterested: ["hidden"] }, () => 0.5);
+  assert.equal(random[random.length - 1].id, "hidden");
+});
+
 test("Smart Feed старается чередовать авторов", () => {
   const pool = [mk("a1", [], "@a"), mk("a2", [], "@a"), mk("b1", [], "@b")];
   const ranked = rank(pool, { likes: [], favs: [], history: [] }, () => 0.5);
