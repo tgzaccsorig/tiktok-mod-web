@@ -27,6 +27,7 @@ import {
 import Sheet, { reasonLabel, type AddResult } from "./Sheet";
 import VideoSlide from "./VideoSlide";
 import AccountPanel from "./AccountPanel";
+import CommentsPanel from "./CommentsPanel";
 import { getSupabase, type AccountIdentity } from "@/lib/supabase";
 
 type Playback = "loading" | "playing" | "paused" | "error";
@@ -65,6 +66,7 @@ export default function Feed() {
   const [toast, setToast] = useState<string | null>(null);
   const [isFs, setIsFs] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [commentsOpen, setCommentsOpen] = useState(false);
   const [accountUser, setAccountUser] = useState<AccountIdentity | null>(null);
 
   const mode = store.category;
@@ -896,6 +898,10 @@ export default function Feed() {
             <BookmarkIcon filled={faved} className={`h-9 w-9 drop-shadow ${faved ? "pop text-yellow-300" : ""}`} />
             <span className="text-xs">{faved ? "В избранном" : "Избранное"}</span>
           </button>
+          <button aria-label="Комментарии" onClick={() => setCommentsOpen(true)} className="flex flex-col items-center">
+            <span className="text-3xl leading-9 drop-shadow">💬</span>
+            <span className="text-xs">Комментарии</span>
+          </button>
           <button aria-label="Поделиться" onClick={share} className="flex flex-col items-center">
             <ShareIcon className="h-9 w-9 drop-shadow" />
             <span className="text-xs">Поделиться</span>
@@ -972,6 +978,13 @@ export default function Feed() {
         </div>
       )}
 
+      <CommentsPanel
+        open={commentsOpen}
+        video={current ?? null}
+        user={accountUser}
+        onClose={() => setCommentsOpen(false)}
+        onLogin={() => { setCommentsOpen(false); setAccountOpen(true); }}
+      />
       <AccountPanel
         open={accountOpen}
         onClose={() => setAccountOpen(false)}
