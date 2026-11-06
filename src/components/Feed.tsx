@@ -250,6 +250,9 @@ export default function Feed() {
       return;
     }
 
+    if (previousOwner !== nextOwner) {
+      update((s) => ({ ...s, likes: [], favs: [], history: [] }));
+    }
     const supabase = getSupabase();
     if (!supabase) return;
     let cancelled = false;
