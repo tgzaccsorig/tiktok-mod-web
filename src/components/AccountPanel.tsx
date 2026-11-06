@@ -301,7 +301,7 @@ export default function AccountPanel({ open, onClose, onUserChange }: Props) {
                 <div className="space-y-2"><h3 className="font-semibold">Мой профиль</h3><input className={inputClass} value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Уникальный никнейм"/><input className={inputClass} value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Имя"/><textarea className={inputClass} rows={3} maxLength={160} value={bio} onChange={(e) => setBio(e.target.value)} placeholder="О себе (до 160 символов)"/><button className="w-full rounded-lg bg-cyan-400 py-2 font-semibold text-black disabled:opacity-40" disabled={busy || !username.trim()} onClick={saveProfile}>Сохранить профиль</button></div>
                 <div className="space-y-2 border-t border-white/10 pt-3">
                   <h3 className="font-semibold">Мои публикации</h3>
-                  <p className="text-xs text-neutral-400">Добавь ссылку на свой публичный ролик TikTok — он появится в профиле и ленте подписок.</p>
+                  <p className="text-xs text-neutral-400">Добавь ссылку на публичный ролик TikTok — он появится в твоём профиле и ленте подписок.</p>
                   <div className="flex gap-2">
                     <input className={inputClass} value={publishUrl} onChange={(e) => setPublishUrl(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void publishVideo()} placeholder="https://www.tiktok.com/@.../video/..." />
                     <button className={buttonClass} disabled={publishing || !publishUrl.trim()} onClick={() => void publishVideo()}>{publishing ? "…" : "Опубликовать"}</button>
