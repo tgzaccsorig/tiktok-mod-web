@@ -22,9 +22,9 @@ export function clampIndex(i: number, len: number): number {
 }
 
 /** Сколько роликов вперёд предзагружаем (кроме текущего). */
-export const PRELOAD_AHEAD = 2;
+export const PRELOAD_AHEAD = 1;
 
-/** Индексы слайдов, у которых смонтирован настоящий плеер: текущий + два следующих (предзагрузка). */
+/** Индексы слайдов, у которых смонтирован настоящий плеер: текущий + один следующий. */
 export function playerIndexes(index: number, len: number): number[] {
   return [index, index + 1, index + PRELOAD_AHEAD].filter((i) => i >= 0 && i < len);
 }
