@@ -771,7 +771,7 @@ export default function Feed() {
       (i) =>
         i === index ||
         srcOpts.current.has(queue[i].key) ||
-        (i === index + 1 && nextReady) ||
+        (i === index + 1 && nextReady),
     ),
   );
   const visible = visibleIndexes(index, queue.length);
