@@ -15,6 +15,14 @@ export function shuffle<T>(arr: T[], rng: () => number = Math.random): T[] {
   return a;
 }
 
+/** Russian-language filter for the For You and Random feeds. */
+export function isRussianVideo(v: VideoItem): boolean {
+  const text = (v.title + " " + v.hashtags.join(" ")).toLocaleLowerCase("ru");
+  const letters = text.match(/[a-zа-яё]/gi) ?? [];
+  const cyrillic = text.match(/[а-яё]/gi) ?? [];
+  return cyrillic.length >= 3 && letters.length > 0 && cyrillic.length / letters.length >= 0.35;
+}
+
 /** Собственный алгоритм подбора: учитывает лайки, избранное и просмотры по категориям и авторам. */
 export function rank(pool: VideoItem[], ctx: Ctx, rng: () => number = Math.random): VideoItem[] {
   const byId = new Map(pool.map((v) => [v.id, v]));
@@ -75,9 +83,9 @@ export function buildPass(
       .map((h) => byId.get(h.id))
       .filter((v): v is VideoItem => !!v);
   } else if (mode === "random") {
-    list = shuffle(pool, rng);
+    list = shuffle(pool.filter(isRussianVideo), rng);
   } else if (mode === "foryou") {
-    list = rank(pool, ctx, rng);
+    list = rank(pool.filter(isRussianVideo), ctx, rng);
   } else {
     list = rank(
       pool.filter((v) => v.categories.includes(mode)),
