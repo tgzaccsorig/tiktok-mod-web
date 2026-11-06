@@ -4,6 +4,7 @@ export type Ctx = {
   likes: string[];
   favs: string[];
   history: { id: string; ts: number }[];
+  notInterested?: string[];
 };
 
 export function shuffle<T>(arr: T[], rng: () => number = Math.random): T[] {
@@ -48,7 +49,8 @@ export function rank(pool: VideoItem[], ctx: Ctx, rng: () => number = Math.rando
     const aut = (authorAff[v.author] ?? 0) * 1.5;
     const novelty = seen[v.id] ? -Math.min(seen[v.id], 6) * 0.5 : 2;
     const russianBoost = isRussianVideo(v) ? 8 : 0;
-    return cat + aut + novelty + russianBoost + rng() * 1.5;
+    const notInterestedPenalty = ctx.notInterested?.includes(v.id) ? -20 : 0;
+    return cat + aut + novelty + russianBoost + notInterestedPenalty + rng() * 1.5;
   };
 
   const remaining = pool
@@ -98,9 +100,12 @@ export function buildPass(
       .filter((v) => !!v.publishedAt)
       .sort((a, b) => Date.parse(b.publishedAt ?? "") - Date.parse(a.publishedAt ?? ""));
   } else if (mode === "random") {
-    const russian = discoveryPool.filter(isRussianVideo);
-    const other = discoveryPool.filter((v) => !isRussianVideo(v));
-    list = [...shuffle(russian, rng), ...shuffle(other, rng)];
+    const hidden = new Set(ctx.notInterested ?? []);
+    const preferredPool = discoveryPool.filter((v) => !hidden.has(v.id));
+    const hiddenPool = discoveryPool.filter((v) => hidden.has(v.id));
+    const russian = preferredPool.filter(isRussianVideo);
+    const other = preferredPool.filter((v) => !isRussianVideo(v));
+    list = [...shuffle(russian, rng), ...shuffle(other, rng), ...shuffle(hiddenPool, rng)];
   } else if (mode === "foryou") {
     list = rank(discoveryPool, ctx, rng);
   } else {
