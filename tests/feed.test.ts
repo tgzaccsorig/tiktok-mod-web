@@ -123,6 +123,16 @@ test("режимы: категория, избранное, история, пр
   assert.equal(buildPass("foryou", pool, ctx, Math.random, ["a1"])[0].id, "a1");
 });
 
+test("лента подписок показывает только публикации и сортирует их по новизне", () => {
+  const pool = [
+    { ...mk("old"), publishedAt: "2026-11-01T10:00:00.000Z" },
+    mk("catalog-only"),
+    { ...mk("new"), publishedAt: "2026-11-06T10:00:00.000Z" },
+  ];
+  const out = buildPass("subscriptions", pool, { likes: [], favs: [], history: [] });
+  assert.deepEqual(out.map((video) => video.id), ["new", "old"]);
+});
+
 /* ---------- разбор oEmbed ---------- */
 const OEMBED = {
   version: "1.0",
