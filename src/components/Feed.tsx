@@ -59,7 +59,6 @@ export default function Feed() {
   const [playback, setPlayback] = useState<Playback>("loading");
   const [unlocked, setUnlocked] = useState(false);
   const [needsTap, setNeedsTap] = useState(false);
-  const [nextReady, setNextReady] = useState(false);
   const [reloads, setReloads] = useState<Record<string, number>>({});
   const [sheet, setSheet] = useState(false);
   const [nonce, setNonce] = useState(0);
@@ -409,7 +408,6 @@ export default function Feed() {
     if (!currentKey) return;
     setNeedsTap(false);
     setPlayback("loading");
-    setNextReady(false);
     confirmedRef.current = false;
     if (progressRef.current) progressRef.current.style.transform = "scaleX(0)";
     activate(currentKey);
@@ -423,18 +421,10 @@ export default function Feed() {
         void supabase.from("watch_history").insert({ user_id: accountUser.id, video_id: id, watched_at: new Date().toISOString() });
       }
     }, 1500);
-    // следующий ролик начинаем грузить, только когда текущий уже играет (или через 4 с),
-    // чтобы два тяжёлых плеера не делили канал на старте
-    const tNext = setTimeout(() => setNextReady(true), 4000);
     return () => {
       clearTimeout(tHistory);
-      clearTimeout(tNext);
     };
   }, [currentKey, activate, update, accountUser]);
-
-  useEffect(() => {
-    if (playback === "playing") setNextReady(true);
-  }, [playback]);
 
   /* звук: включили/выключили кнопкой или после жеста — применяем к текущему ролику */
   useEffect(() => {
@@ -765,15 +755,8 @@ export default function Feed() {
   };
 
   /* ---------- отрисовка ---------- */
-  // Держим только текущий и один следующий iframe: дополнительные TikTok-плееры заметно нагружают браузер.
-  const players = new Set(
-    playerIndexes(index, queue.length).filter(
-      (i) =>
-        i === index ||
-        srcOpts.current.has(queue[i].key) ||
-        (i === index + 1 && nextReady),
-    ),
-  );
+  // Один активный iframe: соседние слайды показываются только как лёгкие постеры.
+  const players = new Set(playerIndexes(index, queue.length));
   const visible = visibleIndexes(index, queue.length);
   const showSpinner = !!current && playback === "loading";
   const soundOn = unlocked && store.settings.sound;
@@ -863,13 +846,13 @@ export default function Feed() {
 
       {/* верхняя панель */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-30 bg-gradient-to-b from-black/70 to-transparent pt-[max(0.5rem,env(safe-area-inset-top))]">
-        <div className="flex items-center justify-between px-3">
-          <span className="logo-glitch text-base font-extrabold tracking-tight">TikTok Mod Web</span>
+        <div className="feed-header flex items-center justify-between px-3">
+          <span className="logo-glitch feed-logo text-base font-extrabold tracking-tight">TikTok Mod Web</span>
           <div className="pointer-events-auto flex items-center gap-1">
-            <button aria-label="Профиль и аккаунт" onClick={() => setAccountOpen(true)} className="rounded-full px-2 py-1 text-lg hover:bg-white/10">
+            <button aria-label="Профиль и аккаунт" onClick={() => setAccountOpen(true)} className="feed-icon-button rounded-full px-2 py-1 text-lg">
               {accountUser ? "👤" : "♙"}
             </button>
-            <button aria-label="Обновить ленту" onClick={refresh} className="rounded-full p-2 hover:bg-white/10">
+            <button aria-label="Обновить ленту" onClick={refresh} className="feed-icon-button rounded-full p-2">
               <RefreshIcon />
             </button>
             <button aria-label="Звук" onClick={onSoundButton} className="rounded-full p-2 hover:bg-white/10">
@@ -889,8 +872,8 @@ export default function Feed() {
               key={c.id}
               data-testid={`chip-${c.id}`}
               onClick={() => setMode(c.id)}
-              className={`shrink-0 rounded-full px-3 py-1 text-sm font-medium transition-colors ${
-                mode === c.id ? "bg-white text-black" : "bg-white/15 text-white"
+              className={`feed-chip shrink-0 rounded-full px-3 py-1 text-sm font-medium transition-colors ${
+                mode === c.id ? "feed-chip-active" : ""
               }`}
             >
               {c.label}
@@ -901,8 +884,8 @@ export default function Feed() {
 
       {/* правая панель действий */}
       {current && (
-        <div className="absolute bottom-[max(7rem,calc(env(safe-area-inset-bottom)+6rem))] right-2 z-30 flex flex-col items-center gap-5">
-          <button aria-label="Лайк" data-testid="like" onClick={() => toggleIn("likes")} className="flex flex-col items-center">
+        <div className="feed-action-rail absolute bottom-[max(7rem,calc(env(safe-area-inset-bottom)+6rem))] right-2 z-30 flex flex-col items-center gap-5">
+          <button aria-label="Лайк" data-testid="like" onClick={() => toggleIn("likes")} className="feed-action flex flex-col items-center">
             <HeartIcon filled={liked} className={`h-9 w-9 drop-shadow ${liked ? "pop text-brand-red" : ""}`} />
             <span className="text-xs">{liked ? "Нравится" : "Лайк"}</span>
           </button>
@@ -919,7 +902,7 @@ export default function Feed() {
 
       {/* информация о ролике */}
       {current && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 bg-gradient-to-t from-black/80 via-black/30 to-transparent px-3 pb-[max(1rem,env(safe-area-inset-bottom))] pt-16 pr-20">
+        <div className="feed-caption pointer-events-none absolute inset-x-0 bottom-0 z-30 bg-gradient-to-t from-black/90 via-black/35 to-transparent px-3 pb-[max(1rem,env(safe-area-inset-bottom))] pt-16 pr-20">
           <a
             href={current.authorUrl || current.url}
             target="_blank"
