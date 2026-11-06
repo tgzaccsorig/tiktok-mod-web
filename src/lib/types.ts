@@ -32,6 +32,7 @@ export type VideoItem = {
   thumbnail: string | null;
   categories: CategoryId[];
   publishedAt?: string;
+  ownerId?: string;
 };
 
 export type Slide = { key: string; item: VideoItem; cycle: number };
