@@ -82,6 +82,10 @@ export function buildPass(
       .filter((h) => (seen.has(h.id) ? false : (seen.add(h.id), true)))
       .map((h) => byId.get(h.id))
       .filter((v): v is VideoItem => !!v);
+  } else if (mode === "subscriptions") {
+    list = pool
+      .filter((v) => !!v.publishedAt)
+      .sort((a, b) => Date.parse(b.publishedAt ?? "") - Date.parse(a.publishedAt ?? ""));
   } else if (mode === "random") {
     const russian = pool.filter(isRussianVideo);
     const other = pool.filter((v) => !isRussianVideo(v));
