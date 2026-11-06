@@ -40,6 +40,13 @@ export default function AccountPanel({ open, onClose, onUserChange }: Props) {
   const [publishUrl, setPublishUrl] = useState("");
   const [publishing, setPublishing] = useState(false);
   const [publishedVideos, setPublishedVideos] = useState<PublishedVideo[]>([]);
+  const [notifications, setNotifications] = useState<{
+    id: string; type: "follow" | "like" | "comment"; video_id: string | null;
+    created_at: string; read_at: string | null;
+    actor: { username: string; display_name: string | null } | null;
+  }[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Profile[]>([]);
   const [following, setFollowing] = useState(false);
@@ -93,6 +100,7 @@ export default function AccountPanel({ open, onClose, onUserChange }: Props) {
         }
         await loadStats(user.id, active);
         await loadPublishedVideos(user.id);
+        await loadNotifications(user.id);
       } catch (e) { if (active) setError(errorText(e)); }
     })();
     return () => { active = false; };
@@ -142,6 +150,40 @@ export default function AccountPanel({ open, onClose, onUserChange }: Props) {
       .order("created_at", { ascending: false })
       .limit(50);
     if (!videosError) setPublishedVideos((data ?? []) as PublishedVideo[]);
+  };
+
+
+  const loadNotifications = async (id: string) => {
+    if (!supabase) return;
+    const { data, error: notificationError } = await supabase
+      .from("notifications")
+      .select("id,type,video_id,created_at,read_at,actor:profiles!notifications_actor_id_fkey(username,display_name)")
+      .eq("user_id", id)
+      .order("created_at", { ascending: false })
+      .limit(40);
+    if (notificationError) {
+      setError("Не удалось загрузить уведомления.");
+      return;
+    }
+    const rows = (data ?? []) as unknown as typeof notifications;
+    setNotifications(rows);
+    setUnreadCount(rows.filter((item) => !item.read_at).length);
+  };
+
+  const markNotificationRead = async (id: string) => {
+    if (!supabase || !user) return;
+    const readAt = new Date().toISOString();
+    const { error: updateError } = await supabase
+      .from("notifications")
+      .update({ read_at: readAt })
+      .eq("id", id)
+      .eq("user_id", user.id);
+    if (updateError) {
+      setError("Не удалось отметить уведомление прочитанным.");
+      return;
+    }
+    setNotifications((items) => items.map((item) => item.id === id ? { ...item, read_at: readAt } : item));
+    setUnreadCount((count) => Math.max(0, count - 1));
   };
 
   const publishVideo = async () => {
@@ -255,6 +297,13 @@ export default function AccountPanel({ open, onClose, onUserChange }: Props) {
         : await supabase.from("follows").insert({ follower_id: user.id, following_id: viewed.id });
       if (result.error) throw result.error;
       setFollowing(!following);
+      if (!following) {
+        await supabase.from("notifications").insert({
+          user_id: viewed.id,
+          actor_id: user.id,
+          type: "follow",
+        });
+      }
       await loadStats(viewed.id);
     } catch (e) { setError(errorText(e)); }
     finally { setBusy(false); }
@@ -318,7 +367,34 @@ export default function AccountPanel({ open, onClose, onUserChange }: Props) {
                   </div>
                 </div>
                 <div className="space-y-2 border-t border-white/10 pt-3"><h3 className="font-semibold">Поиск пользователей</h3><div className="flex gap-2"><input className={inputClass} value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && searchUsers()} placeholder="Найти по никнейму"/><button className={buttonClass} onClick={searchUsers}>Найти</button></div>{results.map((p) => <button key={p.id} onClick={() => openUser(p)} className="flex w-full items-center justify-between rounded-lg bg-white/5 p-3 text-left"><span><b>{p.display_name || p.username}</b><span className="ml-2 text-sm text-neutral-400">@{p.username}</span></span><span>Открыть →</span></button>)}</div>
-                <div className="border-t border-white/10 pt-3"><div className="flex flex-wrap gap-2">{(["likes","favorites","history"] as const).map((t) => <button key={t} className={tab === t ? "rounded-full bg-white px-3 py-1 text-sm text-black" : buttonClass} onClick={() => setTab(t)}>{t === "likes" ? "Лайки" : t === "favorites" ? "Избранное" : "История"}</button>)}</div><div className="mt-2 space-y-1 text-sm text-neutral-300">{lists[tab].length ? lists[tab].map((id, i) => <p key={id + i} className="rounded bg-white/5 px-2 py-1">Видео ID: {id}</p>) : <p className="text-neutral-500">Здесь пока пусто. Список сохраняется в аккаунте.</p>}</div></div>
+
+                <div className="border-t border-white/10 pt-3">
+                  <button className={buttonClass} onClick={() => { setShowNotifications((value) => !value); if (!showNotifications) void loadNotifications(user.id); }}>
+                    🔔 Уведомления {unreadCount > 0 ? "· " + unreadCount + " новых" : ""}
+                  </button>
+                  {showNotifications ? (
+                    <div className="mt-2 space-y-2">
+                      {notifications.map((item) => (
+                        <div key={item.id} className={"rounded-lg p-3 text-sm " + (item.read_at ? "bg-white/5" : "bg-cyan-400/10")}>
+                          <p>
+                            <b>{item.actor?.display_name || item.actor?.username || "Пользователь"}</b>{" "}
+                            {item.type === "follow" ? "подписался на вас" : item.type === "like" ? "поставил лайк вашему видео" : "оставил комментарий к вашему видео"}
+                          </p>
+                          <div className="mt-2 flex items-center justify-between gap-2">
+                            <time className="text-xs text-neutral-500">{new Date(item.created_at).toLocaleString("ru-RU")}</time>
+                            {!item.read_at && <button className="text-xs text-cyan-200" onClick={() => void markNotificationRead(item.id)}>Прочитано</button>}
+                          </div>
+                        </div>
+                      ))}
+                      {!notifications.length && <p className="text-xs text-neutral-500">Пока нет уведомлений.</p>}
+                    </div>
+                  ) : (
+                    <>
+                      <div className="mt-3 flex flex-wrap gap-2">{(["likes","favorites","history"] as const).map((t) => <button key={t} className={tab === t ? "rounded-full bg-white px-3 py-1 text-sm text-black" : buttonClass} onClick={() => setTab(t)}>{t === "likes" ? "Лайки" : t === "favorites" ? "Избранное" : "История"}</button>)}</div>
+                      <div className="mt-2 space-y-1 text-sm text-neutral-300">{lists[tab].length ? lists[tab].map((id, i) => <p key={id + i} className="rounded bg-white/5 px-2 py-1">Видео ID: {id}</p>) : <p className="text-neutral-500">Здесь пока пусто. Список сохраняется в аккаунте.</p>}</div>
+                    </>
+                  )}
+                </div>
               </>
             ) : (
               <div className="space-y-3">
