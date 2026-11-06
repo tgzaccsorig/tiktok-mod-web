@@ -1,0 +1,67 @@
+import Link from "next/link";
+
+const updates = [
+  {
+    version: "1.0.1",
+    date: "06.11.2026",
+    title: "Добавлен журнал обновлений",
+    changes: [
+      "Добавлена отдельная страница с историей изменений TikTok Mod Web.",
+      "На главной странице появилась кнопка «Обновления».",
+      "Новые функции, исправления и улучшения будут записываться сюда.",
+    ],
+  },
+];
+
+export default function UpdatesPage() {
+  return (
+    <main className="min-h-dvh bg-black px-4 py-8 text-white sm:px-6">
+      <div className="mx-auto w-full max-w-2xl">
+        <Link
+          href="/"
+          className="inline-flex rounded-full border border-white/15 px-4 py-2 text-sm text-white/75 transition hover:bg-white/10 hover:text-white"
+        >
+          ← Назад в ленту
+        </Link>
+
+        <header className="mb-8 mt-8">
+          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-300">
+            TikTok Mod Web
+          </p>
+          <h1 className="mt-2 text-3xl font-extrabold tracking-tight sm:text-4xl">
+            Журнал обновлений
+          </h1>
+          <p className="mt-3 text-sm text-white/60">
+            Здесь публикуется история новых функций, исправлений и улучшений сайта.
+          </p>
+        </header>
+
+        <div className="space-y-4">
+          {updates.map((update) => (
+            <article
+              key={update.version}
+              className="rounded-2xl border border-white/10 bg-white/[0.04] p-5 shadow-xl shadow-black/20"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="rounded-full bg-cyan-300/10 px-3 py-1 text-xs font-bold text-cyan-200">
+                  Версия {update.version}
+                </span>
+                <time className="text-xs text-white/45">{update.date}</time>
+              </div>
+              <h2 className="mt-4 text-lg font-bold">{update.title}</h2>
+              <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-white/75">
+                {update.changes.map((change) => (
+                  <li key={change}>{change}</li>
+                ))}
+              </ul>
+            </article>
+          ))}
+        </div>
+
+        <p className="mt-8 text-center text-xs text-white/35">
+          История обновлений TikTok Mod Web
+        </p>
+      </div>
+    </main>
+  );
+}
