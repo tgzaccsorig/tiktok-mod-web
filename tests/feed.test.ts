@@ -123,6 +123,23 @@ test("режимы: категория, избранное, история, пр
   assert.equal(buildPass("foryou", pool, ctx, Math.random, ["a1"])[0].id, "a1");
 });
 
+test("Smart Feed откладывает недавно просмотренные видео, пока есть новые", () => {
+  const pool = [mk("recent"), mk("fresh-1"), mk("fresh-2")];
+  const ctx = { likes: [], favs: [], history: [{ id: "recent", ts: 100 }] };
+  const forYou = buildPass("foryou", pool, ctx);
+  const random = buildPass("random", pool, ctx, () => 0.5);
+  assert.ok(!forYou.some((video) => video.id === "recent"));
+  assert.ok(!random.some((video) => video.id === "recent"));
+});
+
+test("Smart Feed старается чередовать авторов", () => {
+  const pool = [mk("a1", [], "@a"), mk("a2", [], "@a"), mk("b1", [], "@b")];
+  const ranked = rank(pool, { likes: [], favs: [], history: [] }, () => 0.5);
+  for (let i = 1; i < ranked.length; i++) {
+    assert.notEqual(ranked[i].author, ranked[i - 1].author);
+  }
+});
+
 test("лента подписок показывает только публикации и сортирует их по новизне", () => {
   const pool = [
     { ...mk("old"), publishedAt: "2026-11-01T10:00:00.000Z" },
