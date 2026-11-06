@@ -53,31 +53,41 @@ alter table public.watch_history enable row level security;
 drop policy if exists "Profiles are publicly readable" on public.profiles;
 create policy "Profiles are publicly readable" on public.profiles for select using (true);
 drop policy if exists "Users create own profile" on public.profiles;
+drop policy if exists "Users create own profile" on public.profiles;
 create policy "Users create own profile" on public.profiles for insert to authenticated with check ((select auth.uid()) = id);
+drop policy if exists "Users update own profile" on public.profiles;
 drop policy if exists "Users update own profile" on public.profiles;
 create policy "Users update own profile" on public.profiles for update to authenticated using ((select auth.uid()) = id) with check ((select auth.uid()) = id);
 
 drop policy if exists "Follow relationships are publicly readable" on public.follows;
 create policy "Follow relationships are publicly readable" on public.follows for select using (true);
 drop policy if exists "Users follow as themselves" on public.follows;
+drop policy if exists "Users follow as themselves" on public.follows;
 create policy "Users follow as themselves" on public.follows for insert to authenticated with check ((select auth.uid()) = follower_id);
+drop policy if exists "Users unfollow as themselves" on public.follows;
 drop policy if exists "Users unfollow as themselves" on public.follows;
 create policy "Users unfollow as themselves" on public.follows for delete to authenticated using ((select auth.uid()) = follower_id);
 
 drop policy if exists "Likes are publicly readable" on public.likes;
 create policy "Likes are publicly readable" on public.likes for select using (true);
 drop policy if exists "Users manage own likes" on public.likes;
-create policy "Users create own likes" on public.likes for insert to authenticated with check ((select auth.uid()) = user_id);\ncreate policy "Users delete own likes" on public.likes for delete to authenticated using ((select auth.uid()) = user_id);
+drop policy if exists "Users create own likes" on public.likes;
+create policy "Users create own likes" on public.likes for insert to authenticated with check ((select auth.uid()) = user_id);\ndrop policy if exists "Users delete own likes" on public.likes;
+create policy "Users delete own likes" on public.likes for delete to authenticated using ((select auth.uid()) = user_id);
 
 drop policy if exists "Favorites are private to owner" on public.favorites;
 create policy "Favorites are private to owner" on public.favorites for select using (auth.uid() = user_id);
 drop policy if exists "Users manage own favorites" on public.favorites;
-create policy "Users create own favorites" on public.favorites for insert to authenticated with check ((select auth.uid()) = user_id);\ncreate policy "Users delete own favorites" on public.favorites for delete to authenticated using ((select auth.uid()) = user_id);
+drop policy if exists "Users create own favorites" on public.favorites;
+create policy "Users create own favorites" on public.favorites for insert to authenticated with check ((select auth.uid()) = user_id);\ndrop policy if exists "Users delete own favorites" on public.favorites;
+create policy "Users delete own favorites" on public.favorites for delete to authenticated using ((select auth.uid()) = user_id);
 
 drop policy if exists "History is private to owner" on public.watch_history;
 create policy "History is private to owner" on public.watch_history for select using (auth.uid() = user_id);
 drop policy if exists "Users insert own history" on public.watch_history;
+drop policy if exists "Users insert own history" on public.watch_history;
 create policy "Users insert own history" on public.watch_history for insert to authenticated with check ((select auth.uid()) = user_id);
+drop policy if exists "Users delete own history" on public.watch_history;
 drop policy if exists "Users delete own history" on public.watch_history;
 create policy "Users delete own history" on public.watch_history for delete to authenticated using ((select auth.uid()) = user_id);
 
@@ -113,6 +123,8 @@ alter table public.comments enable row level security;
 drop policy if exists "Comments are publicly readable" on public.comments;
 create policy "Comments are publicly readable" on public.comments for select using (true);
 drop policy if exists "Users create own comments" on public.comments;
+drop policy if exists "Users create own comments" on public.comments;
 create policy "Users create own comments" on public.comments for insert to authenticated with check ((select auth.uid()) = user_id);
+drop policy if exists "Users delete own comments" on public.comments;
 drop policy if exists "Users delete own comments" on public.comments;
 create policy "Users delete own comments" on public.comments for delete to authenticated using ((select auth.uid()) = user_id);\ncreate index if not exists comments_user_created_idx on public.comments(user_id, created_at desc);
