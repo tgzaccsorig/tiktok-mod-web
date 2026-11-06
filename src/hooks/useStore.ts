@@ -9,6 +9,7 @@ export const DEFAULT_STORE: Store = {
   likes: [],
   favs: [],
   history: [],
+  notInterested: [],
   custom: [],
   category: "foryou",
   settings: { sound: true, autoNext: false },
