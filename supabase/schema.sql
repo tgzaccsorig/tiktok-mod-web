@@ -98,3 +98,21 @@ $$;
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created after insert on auth.users
 for each row execute procedure public.handle_new_user();
+
+
+-- Video comments (TikTok Mod Web 2.0)
+create table if not exists public.comments (
+  id uuid primary key default gen_random_uuid(),
+  video_id text not null,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  content text not null check (char_length(content) between 1 and 1000),
+  created_at timestamptz not null default now()
+);
+create index if not exists comments_video_created_idx on public.comments(video_id, created_at desc);
+alter table public.comments enable row level security;
+drop policy if exists "Comments are publicly readable" on public.comments;
+create policy "Comments are publicly readable" on public.comments for select using (true);
+drop policy if exists "Users create own comments" on public.comments;
+create policy "Users create own comments" on public.comments for insert with check (auth.uid() = user_id);
+drop policy if exists "Users delete own comments" on public.comments;
+create policy "Users delete own comments" on public.comments for delete using (auth.uid() = user_id);
