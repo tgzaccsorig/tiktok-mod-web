@@ -31,3 +31,9 @@ create policy "Users create own comments" on public.comments for insert to authe
 drop policy if exists "Users delete own comments" on public.comments;
 create policy "Users delete own comments" on public.comments for delete to authenticated using ((select auth.uid()) = user_id);
 create index if not exists comments_user_created_idx on public.comments(user_id, created_at desc);
+
+-- Keep private reads scoped to authenticated owners and avoid per-row auth calls.
+drop policy if exists "Favorites are private to owner" on public.favorites;
+create policy "Favorites are private to owner" on public.favorites for select to authenticated using ((select auth.uid()) = user_id);
+drop policy if exists "History is private to owner" on public.watch_history;
+create policy "History is private to owner" on public.watch_history for select to authenticated using ((select auth.uid()) = user_id);
