@@ -108,7 +108,11 @@ test("For You and Random contain only videos with predominantly Russian text", (
 });
 
 test("режимы: категория, избранное, история, приоритет", () => {
-  const pool = [mk("m1", ["memes"]), mk("g1", ["games"]), mk("a1", ["animals"])];
+  const pool = [
+    { ...mk("m1", ["memes"]), title: "Русские мемы" },
+    { ...mk("g1", ["games"]), title: "Русские игры" },
+    { ...mk("a1", ["animals"]), title: "Русские животные" },
+  ];
   const ctx = { likes: [], favs: ["a1", "g1"], history: [{ id: "m1", ts: 1 }, { id: "g1", ts: 5 }, { id: "m1", ts: 9 }] };
   assert.deepEqual(buildPass("games", pool, ctx).map((v) => v.id), ["g1"]);
   assert.deepEqual(buildPass("favorites", pool, ctx).map((v) => v.id), ["g1", "a1"]);
