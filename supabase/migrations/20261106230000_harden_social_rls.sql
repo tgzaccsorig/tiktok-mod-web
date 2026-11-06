@@ -37,3 +37,29 @@ drop policy if exists "Favorites are private to owner" on public.favorites;
 create policy "Favorites are private to owner" on public.favorites for select to authenticated using ((select auth.uid()) = user_id);
 drop policy if exists "History is private to owner" on public.watch_history;
 create policy "History is private to owner" on public.watch_history for select to authenticated using ((select auth.uid()) = user_id);
+
+
+-- User publications: validated public TikTok links attached to a profile.
+create table if not exists public.user_videos (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  video_id text not null,
+  video_url text not null,
+  author text not null,
+  author_url text not null default '',
+  title text not null default '',
+  hashtags text[] not null default '{}',
+  music text,
+  thumbnail text,
+  categories text[] not null default '{}',
+  created_at timestamptz not null default now(),
+  unique(user_id, video_id)
+);
+create index if not exists user_videos_user_created_idx on public.user_videos(user_id, created_at desc);
+alter table public.user_videos enable row level security;
+drop policy if exists "Published videos are publicly readable" on public.user_videos;
+create policy "Published videos are publicly readable" on public.user_videos for select to anon, authenticated using (true);
+drop policy if exists "Users publish their own videos" on public.user_videos;
+create policy "Users publish their own videos" on public.user_videos for insert to authenticated with check ((select auth.uid()) = user_id);
+drop policy if exists "Users delete their own videos" on public.user_videos;
+create policy "Users delete their own videos" on public.user_videos for delete to authenticated using ((select auth.uid()) = user_id);
