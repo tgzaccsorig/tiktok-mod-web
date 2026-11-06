@@ -29,7 +29,7 @@ type Props = {
   register: (key: string, el: HTMLIFrameElement | null) => void;
 };
 
-/** Один экран ленты. Настоящий плеер TikTok монтируется только у текущего и следующего ролика. */
+/** Один экран ленты. Настоящий плеер TikTok монтируется только у текущего ролика. */
 export default function VideoSlide(p: Props) {
   const { slide, position } = p;
   const thumb = slide.item.thumbnail;

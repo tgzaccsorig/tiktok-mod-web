@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { clampIndex, decideSwipe, needsMore, nextPass, playerIndexes, toSlides, visibleIndexes } from "../src/lib/feedEngine";
-import { buildPass, rank } from "../src/lib/recommend";
+import { buildPass, isRussianVideo, rank } from "../src/lib/recommend";
 import { categorize, extractHashtags, isAllowedTikTokUrl, normalizeUrl, parseOembed } from "../src/lib/tiktok";
 import type { VideoItem } from "../src/lib/types";
 
@@ -40,11 +40,13 @@ test("индекс не выходит за границы ленты", () => {
   assert.equal(clampIndex(3, 0), 0);
 });
 
-test("плеер монтируется у текущего и двух следующих роликов", () => {
-  assert.deepEqual(playerIndexes(0, 10), [0, 1, 2]);
-  assert.deepEqual(playerIndexes(8, 10), [8, 9]);
+test("тяжёлый iframe монтируется только у текущего ролика, соседи — постеры", () => {
+  assert.deepEqual(playerIndexes(0, 10), [0]);
+  assert.deepEqual(playerIndexes(8, 10), [8]);
   assert.deepEqual(playerIndexes(9, 10), [9]);
-  assert.deepEqual(visibleIndexes(5, 10), [4, 5, 6, 7]);
+  assert.deepEqual(playerIndexes(10, 10), []);
+  assert.deepEqual(visibleIndexes(5, 10), [4, 5, 6]);
+  assert.deepEqual(visibleIndexes(0, 10), [0, 1]);
 });
 
 test("лента бесконечна: когда видео заканчиваются, добавляется новый проход без повтора подряд", () => {
@@ -86,8 +88,33 @@ test("лайки по категории поднимают похожие ро�
   assert.ok(out.indexOf("g2") < out.indexOf("m1"));
 });
 
+test("русскоязычные ролики получают приоритет в рекомендациях", () => {
+  const ru = { ...mk("ru"), title: "Русский мем", hashtags: ["мемы"] };
+  const en = { ...mk("en"), title: "Funny meme", hashtags: ["funny"] };
+  assert.equal(rank([en, ru], { likes: [], favs: [], history: [] }, () => 0.5)[0].id, "ru");
+});
+
+test("For You and Random contain only videos with predominantly Russian text", () => {
+  const ru = { ...mk("ru"), title: "Смешной русский мем", hashtags: ["приколы", "рек"] };
+  const mixed = { ...mk("mixed"), title: "Funny cat котик", hashtags: ["cats"] };
+  const en = { ...mk("en"), title: "Funny cat video", hashtags: ["fyp", "funny"] };
+  assert.equal(isRussianVideo(ru), true);
+  assert.equal(isRussianVideo(mixed), false);
+  assert.equal(isRussianVideo(en), false);
+  const pool = [en, ru, mixed];
+  const ctx = { likes: [], favs: [], history: [] };
+  assert.equal(buildPass("foryou", pool, ctx)[0].id, "ru");
+  assert.equal(buildPass("foryou", pool, ctx).length, 3);
+  assert.equal(buildPass("random", pool, ctx)[0].id, "ru");
+  assert.equal(buildPass("random", pool, ctx).length, 3);
+});
+
 test("режимы: категория, избранное, история, приоритет", () => {
-  const pool = [mk("m1", ["memes"]), mk("g1", ["games"]), mk("a1", ["animals"])];
+  const pool = [
+    { ...mk("m1", ["memes"]), title: "Русские мемы" },
+    { ...mk("g1", ["games"]), title: "Русские игры" },
+    { ...mk("a1", ["animals"]), title: "Русские животные" },
+  ];
   const ctx = { likes: [], favs: ["a1", "g1"], history: [{ id: "m1", ts: 1 }, { id: "g1", ts: 5 }, { id: "m1", ts: 9 }] };
   assert.deepEqual(buildPass("games", pool, ctx).map((v) => v.id), ["g1"]);
   assert.deepEqual(buildPass("favorites", pool, ctx).map((v) => v.id), ["g1", "a1"]);

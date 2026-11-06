@@ -11,7 +11,7 @@ import {
   useStore,
 } from "@/hooks/useStore";
 import { clampIndex, decideSwipe, needsMore, nextPass, playerIndexes, toSlides, visibleIndexes } from "@/lib/feedEngine";
-import { buildPass } from "@/lib/recommend";
+import { buildPass, isRussianVideo } from "@/lib/recommend";
 import { normalizeUrl } from "@/lib/tiktok";
 import { CATEGORIES, type FeedMode, type Slide, type VideoItem } from "@/lib/types";
 import {
@@ -59,8 +59,6 @@ export default function Feed() {
   const [playback, setPlayback] = useState<Playback>("loading");
   const [unlocked, setUnlocked] = useState(false);
   const [needsTap, setNeedsTap] = useState(false);
-  const [nextReady, setNextReady] = useState(false);
-  const [next2Ready, setNext2Ready] = useState(false);
   const [reloads, setReloads] = useState<Record<string, number>>({});
   const [sheet, setSheet] = useState(false);
   const [nonce, setNonce] = useState(0);
@@ -201,6 +199,9 @@ export default function Feed() {
     const fits = fresh.filter(
       (v) => !inQueue.has(v.id) && (m === "foryou" || m === "random" || v.categories.includes(m)),
     );
+    if (m === "foryou" || m === "random") {
+      fits.sort((a, b) => Number(isRussianVideo(b)) - Number(isRussianVideo(a)));
+    }
     if (!fits.length) return;
     const slides: Slide[] = fits.slice(0, 10).map((item) => ({ key: `${item.id}#f`, item, cycle: 0 }));
     const at = Math.min(indexRef.current + 2, queueRef.current.length);
@@ -410,8 +411,6 @@ export default function Feed() {
     if (!currentKey) return;
     setNeedsTap(false);
     setPlayback("loading");
-    setNextReady(false);
-    setNext2Ready(false);
     confirmedRef.current = false;
     if (progressRef.current) progressRef.current.style.transform = "scaleX(0)";
     activate(currentKey);
@@ -425,25 +424,10 @@ export default function Feed() {
         void supabase.from("watch_history").insert({ user_id: accountUser.id, video_id: id, watched_at: new Date().toISOString() });
       }
     }, 1500);
-    // следующий ролик начинаем грузить, только когда текущий уже играет (или через 4 с),
-    // чтобы два тяжёлых плеера не делили канал на старте
-    const tNext = setTimeout(() => setNextReady(true), 4000);
     return () => {
       clearTimeout(tHistory);
-      clearTimeout(tNext);
     };
   }, [currentKey, activate, update, accountUser]);
-
-  useEffect(() => {
-    if (playback === "playing") setNextReady(true);
-  }, [playback]);
-
-  /* второй ролик вперёд начинаем грузить, когда следующий уже ответил (или через 2,5 с после него) */
-  useEffect(() => {
-    if (!nextReady) return;
-    const t = setTimeout(() => setNext2Ready(true), 2500);
-    return () => clearTimeout(t);
-  }, [nextReady, currentKey]);
 
   /* звук: включили/выключили кнопкой или после жеста — применяем к текущему ролику */
   useEffect(() => {
@@ -487,7 +471,6 @@ export default function Feed() {
         case "onPlayerReady":
           readyRef.current.add(key);
           if (isCur) activate(key);
-          else if (key === queueRef.current[indexRef.current + 1]?.key) setNext2Ready(true);
           break;
         case "onMute":
           mutedState.current.set(key, !!d.value);
@@ -775,16 +758,8 @@ export default function Feed() {
   };
 
   /* ---------- отрисовка ---------- */
-  // уже смонтированные (прогретые) плееры не выгружаем при листании; новые подключаем по очереди: +1, затем +2
-  const players = new Set(
-    playerIndexes(index, queue.length).filter(
-      (i) =>
-        i === index ||
-        srcOpts.current.has(queue[i].key) ||
-        (i === index + 1 && nextReady) ||
-        (i === index + 2 && next2Ready),
-    ),
-  );
+  // Один активный iframe: соседние слайды показываются только как лёгкие постеры.
+  const players = new Set(playerIndexes(index, queue.length));
   const visible = visibleIndexes(index, queue.length);
   const showSpinner = !!current && playback === "loading";
   const soundOn = unlocked && store.settings.sound;
@@ -874,13 +849,13 @@ export default function Feed() {
 
       {/* верхняя панель */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-30 bg-gradient-to-b from-black/70 to-transparent pt-[max(0.5rem,env(safe-area-inset-top))]">
-        <div className="flex items-center justify-between px-3">
-          <span className="logo-glitch text-base font-extrabold tracking-tight">TikTok Mod Web</span>
+        <div className="feed-header flex items-center justify-between px-3">
+          <span className="logo-glitch feed-logo text-base font-extrabold tracking-tight">TikTok Mod Web</span>
           <div className="pointer-events-auto flex items-center gap-1">
-            <button aria-label="Профиль и аккаунт" onClick={() => setAccountOpen(true)} className="rounded-full px-2 py-1 text-lg hover:bg-white/10">
+            <button aria-label="Профиль и аккаунт" onClick={() => setAccountOpen(true)} className="feed-icon-button rounded-full px-2 py-1 text-lg">
               {accountUser ? "👤" : "♙"}
             </button>
-            <button aria-label="Обновить ленту" onClick={refresh} className="rounded-full p-2 hover:bg-white/10">
+            <button aria-label="Обновить ленту" onClick={refresh} className="feed-icon-button rounded-full p-2">
               <RefreshIcon />
             </button>
             <button aria-label="Звук" onClick={onSoundButton} className="rounded-full p-2 hover:bg-white/10">
@@ -900,8 +875,8 @@ export default function Feed() {
               key={c.id}
               data-testid={`chip-${c.id}`}
               onClick={() => setMode(c.id)}
-              className={`shrink-0 rounded-full px-3 py-1 text-sm font-medium transition-colors ${
-                mode === c.id ? "bg-white text-black" : "bg-white/15 text-white"
+              className={`feed-chip shrink-0 rounded-full px-3 py-1 text-sm font-medium transition-colors ${
+                mode === c.id ? "feed-chip-active" : ""
               }`}
             >
               {c.label}
@@ -912,8 +887,8 @@ export default function Feed() {
 
       {/* правая панель действий */}
       {current && (
-        <div className="absolute bottom-[max(7rem,calc(env(safe-area-inset-bottom)+6rem))] right-2 z-30 flex flex-col items-center gap-5">
-          <button aria-label="Лайк" data-testid="like" onClick={() => toggleIn("likes")} className="flex flex-col items-center">
+        <div className="feed-action-rail absolute bottom-[max(7rem,calc(env(safe-area-inset-bottom)+6rem))] right-2 z-30 flex flex-col items-center gap-5">
+          <button aria-label="Лайк" data-testid="like" onClick={() => toggleIn("likes")} className="feed-action flex flex-col items-center">
             <HeartIcon filled={liked} className={`h-9 w-9 drop-shadow ${liked ? "pop text-brand-red" : ""}`} />
             <span className="text-xs">{liked ? "Нравится" : "Лайк"}</span>
           </button>
@@ -930,7 +905,7 @@ export default function Feed() {
 
       {/* информация о ролике */}
       {current && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 bg-gradient-to-t from-black/80 via-black/30 to-transparent px-3 pb-[max(1rem,env(safe-area-inset-bottom))] pt-16 pr-20">
+        <div className="feed-caption pointer-events-none absolute inset-x-0 bottom-0 z-30 bg-gradient-to-t from-black/90 via-black/35 to-transparent px-3 pb-[max(1rem,env(safe-area-inset-bottom))] pt-16 pr-20">
           <a
             href={current.authorUrl || current.url}
             target="_blank"

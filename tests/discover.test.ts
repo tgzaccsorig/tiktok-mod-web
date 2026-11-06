@@ -40,6 +40,8 @@ test("перебор тем и страниц: каждая пара тема+с
   assert.equal(pairs.size, TOPICS.length * PAGES);
   assert.equal(queryForSlot(TOPICS.length * PAGES).page, 0);
   assert.ok(queryForSlot(-3).q.startsWith("site:tiktok.com "));
+  const russianTopics = TOPICS.filter((topic) => /[а-яё]/i.test(topic));
+  assert.ok(russianTopics.length >= Math.ceil(TOPICS.length * 0.7), "большинство тем поиска должны быть русскоязычными");
 });
 
 test("интервал из переменной окружения", () => {
