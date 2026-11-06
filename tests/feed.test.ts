@@ -88,6 +88,12 @@ test("лайки по категории поднимают похожие ро�
   assert.ok(out.indexOf("g2") < out.indexOf("m1"));
 });
 
+test("русскоязычные ролики получают приоритет в рекомендациях", () => {
+  const ru = { ...mk("ru"), title: "Русский мем", hashtags: ["мемы"] };
+  const en = { ...mk("en"), title: "Funny meme", hashtags: ["funny"] };
+  assert.equal(rank([en, ru], { likes: [], favs: [], history: [] }, () => 0.5)[0].id, "ru");
+});
+
 test("режимы: категория, избранное, история, приоритет", () => {
   const pool = [mk("m1", ["memes"]), mk("g1", ["games"]), mk("a1", ["animals"])];
   const ctx = { likes: [], favs: ["a1", "g1"], history: [{ id: "m1", ts: 1 }, { id: "g1", ts: 5 }, { id: "m1", ts: 9 }] };
