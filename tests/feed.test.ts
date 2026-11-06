@@ -133,6 +133,14 @@ test("лента подписок показывает только публик
   assert.deepEqual(out.map((video) => video.id), ["new", "old"]);
 });
 
+test("расширенные категории и запасная категория для неизвестной темы", () => {
+  assert.deepEqual(categorize("новая песня и музыка"), ["music"]);
+  assert.deepEqual(categorize("технологии и нейросеть"), ["technology"]);
+  assert.deepEqual(categorize("спорт и футбол"), ["sports"]);
+  assert.deepEqual(categorize("обучение и наука"), ["education"]);
+  assert.deepEqual(categorize("тема без совпадений"), ["other"]);
+});
+
 /* ---------- разбор oEmbed ---------- */
 const OEMBED = {
   version: "1.0",
