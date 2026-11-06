@@ -47,6 +47,7 @@ export type Store = {
   likes: string[];
   favs: string[];
   history: { id: string; ts: number }[];
+  notInterested: string[];
   custom: string[];
   category: FeedMode;
   settings: { sound: boolean; autoNext: boolean };
