@@ -19,7 +19,7 @@ export const CATEGORIES: { id: CategoryId; label: string; keywords: string[] }[]
   { id: "humor", label: "Юмор", keywords: ["funny", "comedy", "humor", "humour", "lol", "joke", "юмор", "смешно", "прикол"] },
 ];
 
-export type FeedMode = "foryou" | "random" | "favorites" | "history" | CategoryId;
+export type FeedMode = "foryou" | "random" | "favorites" | "history" | "subscriptions" | CategoryId;
 
 export type VideoItem = {
   id: string;
@@ -31,6 +31,7 @@ export type VideoItem = {
   music: string | null;
   thumbnail: string | null;
   categories: CategoryId[];
+  publishedAt?: string;
 };
 
 export type Slide = { key: string; item: VideoItem; cycle: number };
