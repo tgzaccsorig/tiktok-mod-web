@@ -58,3 +58,15 @@ body {
 .pop {
   animation: pop 0.25s ease-out;
 }
+
+
+.feed-header { min-height: 52px; }
+.feed-logo { display:inline-flex; align-items:center; min-height:36px; padding:0 11px; border:1px solid rgba(255,255,255,.13); border-radius:12px; background:linear-gradient(110deg,rgba(37,244,238,.13),rgba(254,44,85,.13)); box-shadow:0 8px 28px rgba(0,0,0,.22); }
+.feed-icon-button { display:inline-flex; align-items:center; justify-content:center; min-width:38px; min-height:38px; color:rgba(255,255,255,.95); border:1px solid rgba(255,255,255,.12); background:rgba(15,18,28,.55); backdrop-filter:blur(14px); transition:background 160ms ease,border-color 160ms ease; }
+.feed-icon-button:hover { background:rgba(37,244,238,.16); border-color:rgba(37,244,238,.35); }
+.feed-chip { color:rgba(255,255,255,.9); border:1px solid rgba(255,255,255,.13); background:rgba(18,20,30,.72); backdrop-filter:blur(12px); }
+.feed-chip-active { color:#080b12; border-color:transparent; background:linear-gradient(100deg,#25f4ee,#b9fff9 55%,#fff); box-shadow:0 4px 20px rgba(37,244,238,.22); }
+.feed-action { min-width:54px; gap:5px; padding:9px 6px; border:1px solid rgba(255,255,255,.12); border-radius:18px; color:white; background:rgba(10,12,20,.42); backdrop-filter:blur(12px); text-shadow:0 1px 5px rgba(0,0,0,.8); }
+.feed-action-rail { filter:drop-shadow(0 8px 18px rgba(0,0,0,.25)); }
+.feed-caption { text-shadow:0 2px 8px rgba(0,0,0,.8); }
+@media (prefers-reduced-motion: reduce) { .feed-icon-button { transition:none; } }
