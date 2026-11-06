@@ -320,7 +320,7 @@ export default function Feed() {
       })));
     })();
     return () => { cancelled = true; };
-  }, [mode, accountUser?.id, showToast]);
+  }, [mode, accountUser?.id, accountOpen, showToast]);
 
   const bootstrapped = ready && catalogState !== "loading" && customLoaded;
 
@@ -442,7 +442,7 @@ export default function Feed() {
     setPlayback("loading");
     applyTransform(0, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bootstrapped, mode, nonce]);
+  }, [bootstrapped, mode, nonce, subscriptionItems]);
 
   /* бесконечная подгрузка: когда доходим до конца очереди, добавляем новый проход по каталогу */
   useEffect(() => {
