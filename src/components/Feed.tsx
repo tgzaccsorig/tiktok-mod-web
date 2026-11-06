@@ -754,9 +754,19 @@ export default function Feed() {
     const supabase = getSupabase();
     if (accountUser && supabase) {
       const table = field === "likes" ? "likes" : "favorites";
-      void (wasActive
-        ? supabase.from(table).delete().eq("user_id", accountUser.id).eq("video_id", id)
-        : supabase.from(table).upsert({ user_id: accountUser.id, video_id: id }, { onConflict: "user_id,video_id" }));
+      void (async () => {
+        const result = wasActive
+          ? await supabase.from(table).delete().eq("user_id", accountUser.id).eq("video_id", id)
+          : await supabase.from(table).upsert({ user_id: accountUser.id, video_id: id }, { onConflict: "user_id,video_id" });
+        if (!result.error && !wasActive && field === "likes" && current.ownerId && current.ownerId !== accountUser.id) {
+          await supabase.from("notifications").insert({
+            user_id: current.ownerId,
+            actor_id: accountUser.id,
+            type: "like",
+            video_id: id,
+          });
+        }
+      })();
     }
   };
 
