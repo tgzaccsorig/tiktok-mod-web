@@ -307,7 +307,7 @@ export default function Feed() {
       }
       const { data, error } = await supabase
         .from("user_videos")
-        .select("video_id,video_url,author,author_url,title,hashtags,music,thumbnail,categories,created_at")
+        .select("user_id,video_id,video_url,author,author_url,title,hashtags,music,thumbnail,categories,created_at")
         .in("user_id", creatorIds)
         .order("created_at", { ascending: false })
         .limit(200);
@@ -318,7 +318,7 @@ export default function Feed() {
         return;
       }
       setSubscriptionItems((data ?? []).map((row: {
-        video_id: string; video_url: string; author: string; author_url: string;
+        user_id: string; video_id: string; video_url: string; author: string; author_url: string;
         title: string; hashtags: string[]; music: string | null; thumbnail: string | null;
         categories: string[]; created_at: string;
       }) => ({
@@ -332,6 +332,7 @@ export default function Feed() {
         thumbnail: row.thumbnail,
         categories: (row.categories ?? []) as VideoItem["categories"],
         publishedAt: row.created_at,
+        ownerId: row.user_id,
       })));
     })();
     return () => { cancelled = true; };
