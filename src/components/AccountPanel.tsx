@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { getSupabase, type AccountIdentity } from "@/lib/supabase";
+import { normalizeUrl } from "@/lib/tiktok";
+import type { VideoItem } from "@/lib/types";
 
 type Profile = {
   id: string;
@@ -12,6 +14,8 @@ type Profile = {
   avatar_url: string | null;
   created_at?: string;
 };
+
+type PublishedVideo = { id: string; video_id: string; video_url: string; title: string; author: string; created_at: string };
 
 type Props = {
   open: boolean;
@@ -33,6 +37,9 @@ export default function AccountPanel({ open, onClose, onUserChange }: Props) {
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [bio, setBio] = useState("");
+  const [publishUrl, setPublishUrl] = useState("");
+  const [publishing, setPublishing] = useState(false);
+  const [publishedVideos, setPublishedVideos] = useState<PublishedVideo[]>([]);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Profile[]>([]);
   const [following, setFollowing] = useState(false);
@@ -85,6 +92,7 @@ export default function AccountPanel({ open, onClose, onUserChange }: Props) {
           setBio(p.bio ?? "");
         }
         await loadStats(user.id, active);
+        await loadPublishedVideos(user.id);
       } catch (e) { if (active) setError(errorText(e)); }
     })();
     return () => { active = false; };
@@ -124,6 +132,60 @@ export default function AccountPanel({ open, onClose, onUserChange }: Props) {
       .then(({ data }) => { if (active) setFollowing(!!data); });
     return () => { active = false; };
   }, [supabase, viewed?.id, user?.id]);
+
+  const loadPublishedVideos = async (id: string) => {
+    if (!supabase) return;
+    const { data, error: videosError } = await supabase
+      .from("user_videos")
+      .select("id,video_id,video_url,title,author,created_at")
+      .eq("user_id", id)
+      .order("created_at", { ascending: false })
+      .limit(50);
+    if (!videosError) setPublishedVideos((data ?? []) as PublishedVideo[]);
+  };
+
+  const publishVideo = async () => {
+    if (!supabase || !user || publishing || !publishUrl.trim()) return;
+    setPublishing(true);
+    setError("");
+    setMessage("");
+    try {
+      const url = normalizeUrl(publishUrl);
+      const response = await fetch(`/api/oembed?url=${encodeURIComponent(url)}`);
+      const result = await response.json() as { ok: boolean; item?: VideoItem; reason?: string };
+      if (!response.ok || !result.ok || !result.item) {
+        throw new Error("Не удалось проверить ссылку. Нужна ссылка на общедоступный ролик TikTok.");
+      }
+      const item = result.item;
+      const { error: insertError } = await supabase.from("user_videos").insert({
+        user_id: user.id,
+        video_id: item.id,
+        video_url: item.url,
+        author: item.author,
+        author_url: item.authorUrl,
+        title: item.title,
+        hashtags: item.hashtags,
+        music: item.music,
+        thumbnail: item.thumbnail,
+        categories: item.categories,
+      });
+      if (insertError) {
+        if (insertError.code === "23505") throw new Error("Этот ролик уже опубликован в твоём профиле.");
+        throw insertError;
+      }
+      setPublishUrl("");
+      setMessage("Видео опубликовано в твоём профиле.");
+      await loadPublishedVideos(user.id);
+    } catch (e) { setError(errorText(e)); }
+    finally { setPublishing(false); }
+  };
+
+  const removePublishedVideo = async (id: string) => {
+    if (!supabase || !user) return;
+    const { error: deleteError } = await supabase.from("user_videos").delete().eq("id", id).eq("user_id", user.id);
+    if (deleteError) setError(errorText(deleteError));
+    else setPublishedVideos((items) => items.filter((item) => item.id !== id));
+  };
 
   const submitAuth = async () => {
     if (!supabase || busy) return;
@@ -181,7 +243,7 @@ export default function AccountPanel({ open, onClose, onUserChange }: Props) {
 
   const openUser = async (p: Profile) => {
     setViewed(p); setError(""); setMessage("");
-    try { await loadStats(p.id); } catch (e) { setError(errorText(e)); }
+    try { await loadStats(p.id); await loadPublishedVideos(p.id); } catch (e) { setError(errorText(e)); }
   };
 
   const toggleFollow = async () => {
@@ -237,6 +299,24 @@ export default function AccountPanel({ open, onClose, onUserChange }: Props) {
                   <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs"><Stat label="Подписчики" value={counts.followers}/><Stat label="Подписки" value={counts.following}/><Stat label="Лайки" value={counts.likes}/></div>
                 </div>
                 <div className="space-y-2"><h3 className="font-semibold">Мой профиль</h3><input className={inputClass} value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Уникальный никнейм"/><input className={inputClass} value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Имя"/><textarea className={inputClass} rows={3} maxLength={160} value={bio} onChange={(e) => setBio(e.target.value)} placeholder="О себе (до 160 символов)"/><button className="w-full rounded-lg bg-cyan-400 py-2 font-semibold text-black disabled:opacity-40" disabled={busy || !username.trim()} onClick={saveProfile}>Сохранить профиль</button></div>
+                <div className="space-y-2 border-t border-white/10 pt-3">
+                  <h3 className="font-semibold">Мои публикации</h3>
+                  <p className="text-xs text-neutral-400">Добавь ссылку на свой публичный ролик TikTok — он появится в профиле и ленте подписок.</p>
+                  <div className="flex gap-2">
+                    <input className={inputClass} value={publishUrl} onChange={(e) => setPublishUrl(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void publishVideo()} placeholder="https://www.tiktok.com/@.../video/..." />
+                    <button className={buttonClass} disabled={publishing || !publishUrl.trim()} onClick={() => void publishVideo()}>{publishing ? "…" : "Опубликовать"}</button>
+                  </div>
+                  <div className="space-y-2">
+                    {publishedVideos.map((video) => <div key={video.id} className="flex items-center justify-between gap-3 rounded-lg bg-white/5 p-3">
+                      <a href={video.video_url} target="_blank" rel="noopener noreferrer" className="min-w-0 flex-1 text-sm hover:text-cyan-200">
+                        <span className="block truncate font-medium">{video.title || video.author}</span>
+                        <span className="text-xs text-neutral-500">{video.author} · {new Date(video.created_at).toLocaleDateString("ru-RU")}</span>
+                      </a>
+                      <button className="text-xs text-red-300" onClick={() => void removePublishedVideo(video.id)}>Удалить</button>
+                    </div>)}
+                    {!publishedVideos.length && <p className="text-xs text-neutral-500">Пока нет публикаций.</p>}
+                  </div>
+                </div>
                 <div className="space-y-2 border-t border-white/10 pt-3"><h3 className="font-semibold">Поиск пользователей</h3><div className="flex gap-2"><input className={inputClass} value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && searchUsers()} placeholder="Найти по никнейму"/><button className={buttonClass} onClick={searchUsers}>Найти</button></div>{results.map((p) => <button key={p.id} onClick={() => openUser(p)} className="flex w-full items-center justify-between rounded-lg bg-white/5 p-3 text-left"><span><b>{p.display_name || p.username}</b><span className="ml-2 text-sm text-neutral-400">@{p.username}</span></span><span>Открыть →</span></button>)}</div>
                 <div className="border-t border-white/10 pt-3"><div className="flex flex-wrap gap-2">{(["likes","favorites","history"] as const).map((t) => <button key={t} className={tab === t ? "rounded-full bg-white px-3 py-1 text-sm text-black" : buttonClass} onClick={() => setTab(t)}>{t === "likes" ? "Лайки" : t === "favorites" ? "Избранное" : "История"}</button>)}</div><div className="mt-2 space-y-1 text-sm text-neutral-300">{lists[tab].length ? lists[tab].map((id, i) => <p key={id + i} className="rounded bg-white/5 px-2 py-1">Видео ID: {id}</p>) : <p className="text-neutral-500">Здесь пока пусто. Список сохраняется в аккаунте.</p>}</div></div>
               </>
@@ -244,6 +324,11 @@ export default function AccountPanel({ open, onClose, onUserChange }: Props) {
               <div className="space-y-3">
                 <button className={buttonClass} onClick={() => setViewed(null)}>← Мой аккаунт</button>
                 <div className="rounded-xl bg-white/5 p-4"><h3 className="text-lg font-bold">{viewed.display_name || viewed.username}</h3><p className="text-sm text-cyan-300">@{viewed.username}</p><p className="mt-2 whitespace-pre-wrap text-sm text-neutral-300">{viewed.bio || "Пользователь пока ничего не рассказал о себе."}</p><div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs"><Stat label="Подписчики" value={counts.followers}/><Stat label="Подписки" value={counts.following}/><Stat label="Лайки" value={counts.likes}/></div>{viewed.id !== user.id && <button className="mt-3 w-full rounded-lg bg-cyan-400 py-2 font-semibold text-black disabled:opacity-40" disabled={busy} onClick={toggleFollow}>{following ? "Отписаться" : "Подписаться"}</button>}</div>
+                <div className="space-y-2 border-t border-white/10 pt-3">
+                  <h4 className="font-semibold">Публикации</h4>
+                  {publishedVideos.map((video) => <a key={video.id} href={video.video_url} target="_blank" rel="noopener noreferrer" className="block rounded-lg bg-white/5 p-3 text-sm hover:bg-white/10">{video.title || video.author}<span className="ml-2 text-xs text-neutral-500">Открыть ролик ↗</span></a>)}
+                  {!publishedVideos.length && <p className="text-xs text-neutral-500">Пока нет публикаций.</p>}
+                </div>
                 <div className="flex gap-2">{(["likes","favorites","history"] as const).map((t) => <button key={t} className={tab === t ? "rounded-full bg-white px-3 py-1 text-sm text-black" : buttonClass} onClick={() => setTab(t)}>{t === "likes" ? "Лайки" : t === "favorites" ? "Избранное" : "История"}</button>)}</div>
                 <div className="space-y-1 text-sm text-neutral-300">{lists[tab].map((id, i) => <p key={id + i} className="rounded bg-white/5 px-2 py-1">Видео ID: {id}</p>)}</div>
               </div>
