@@ -443,6 +443,7 @@ export default function Feed() {
     likes: storeRef.current.likes,
     favs: storeRef.current.favs,
     history: storeRef.current.history,
+    notInterested: storeRef.current.notInterested ?? [],
   });
 
   useEffect(() => {
@@ -523,7 +524,7 @@ export default function Feed() {
   }, [unlocked, store.settings.sound, post, ensureSound]);
 
   const dropVideo = useCallback(
-    (id: string) => {
+    (id: string, reason = "Видео недоступно — пропущено") => {
       const q = queueRef.current;
       const cur = indexRef.current;
       const kept = q.filter((s) => s.item.id !== id);
@@ -534,7 +535,7 @@ export default function Feed() {
       setQueue(kept);
       setIndex(newIndex);
       applyTransform(0, false);
-      showToast("Видео недоступно — пропущено");
+      showToast(reason);
     },
     [applyTransform, showToast],
   );
@@ -770,6 +771,13 @@ export default function Feed() {
     }
   };
 
+  const markNotInterested = () => {
+    if (!current) return;
+    const id = current.id;
+    update((s) => ({ ...s, notInterested: Array.from(new Set([...(s.notInterested ?? []), id])) }));
+    dropVideo(id, "Будем реже показывать такие ролики");
+  };
+
   const share = async () => {
     if (!current) return;
     try {
@@ -993,6 +1001,10 @@ export default function Feed() {
           <button aria-label="Комментарии" onClick={() => setCommentsOpen(true)} className="flex flex-col items-center">
             <span className="text-3xl leading-9 drop-shadow">💬</span>
             <span className="text-xs">Комментарии</span>
+          </button>
+          <button aria-label="Не интересно" onClick={markNotInterested} className="flex flex-col items-center">
+            <span className="text-3xl leading-9 drop-shadow">👎</span>
+            <span className="text-xs">Не интересно</span>
           </button>
           <button aria-label="Поделиться" onClick={share} className="flex flex-col items-center">
             <ShareIcon className="h-9 w-9 drop-shadow" />
