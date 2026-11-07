@@ -12,7 +12,7 @@ export const DEFAULT_STORE: Store = {
   notInterested: [],
   custom: [],
   category: "foryou",
-  settings: { sound: true, autoNext: false },
+  settings: { sound: true, autoNext: false, theme: "dark" },
 };
 
 /** Локальное хранилище (localStorage): избранное, лайки, история, настройки, последняя категория. */
