@@ -14,6 +14,7 @@ type Progress = { quest_slug: string; cycle_key: string; progress: number; compl
 type Competition = { slug: string; title: string; description: string; status: string; starts_at: string; ends_at: string | null; winner_user_id: string | null };
 type Entry = { id: string; competition_slug: string; user_id: string; video_url: string; created_at: string; profile?: { username: string; display_name: string | null } | null };
 type ClickerState = { level: number; clicks_total: number; earned_total: number; click_power: number; next_upgrade_cost: number | null };
+const WINTER_QUIZ = [{q:"Как называется северное сияние?",a:["Аврора","Комета","Метель"],correct:0},{q:"Какое дерево украшают на Новый год?",a:["Берёза","Ель","Клён"],correct:1},{q:"Из чего лепят снеговика?",a:["Из песка","Из снега","Из листьев"],correct:1}];
 
 function helsinkiDate(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Helsinki", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
@@ -51,6 +52,13 @@ export default function WinterFestPage() {
   const [user, setUser] = useState<User | null>(null);
   const [balance, setBalance] = useState(0);
   const [clicker, setClicker] = useState<ClickerState>({level:1,clicks_total:0,earned_total:0,click_power:1,next_upgrade_cost:100});
+  const [memoryDeck,setMemoryDeck]=useState(["❄️","🎄","🎁","⛄","🎄","❄️","🐧","🎁","🐧","⛄"]);
+  const [memoryPicks,setMemoryPicks]=useState<number[]>([]);
+  const [memoryMatches,setMemoryMatches]=useState<number[]>([]);
+  const [quizIndex,setQuizIndex]=useState(0);
+  const [quizScore,setQuizScore]=useState(0);
+  const [quizDone,setQuizDone]=useState(false);
+  const [snowHunt,setSnowHunt]=useState(0);
   const [eventSettings, setEventSettings] = useState({test_mode:false,test_date:"2026-12-20"});
   const [rewards, setRewards] = useState<Reward[]>([]);
   const [claims, setClaims] = useState<string[]>([]);
@@ -206,6 +214,11 @@ export default function WinterFestPage() {
     finally { setBusy(null); }
   };
 
+  const pickMemoryCard=(index:number)=>{if(memoryMatches.includes(index)||memoryPicks.includes(index))return;if(memoryPicks.length>=2){setMemoryPicks([index]);return;}const next=[...memoryPicks,index];setMemoryPicks(next);if(next.length===2&&memoryDeck[next[0]]===memoryDeck[next[1]]){setMemoryMatches(old=>[...old,...next]);setMemoryPicks([]);}};
+  const resetMemory=()=>{setMemoryDeck(["❄️","🎄","🎁","⛄","🎄","❄️","🐧","🎁","🐧","⛄"].sort(()=>Math.random()-.5));setMemoryPicks([]);setMemoryMatches([]);};
+  const answerQuiz=(answer:number)=>{if(quizDone)return;if(answer===WINTER_QUIZ[quizIndex].correct)setQuizScore(v=>v+1);if(quizIndex===2)setQuizDone(true);else setQuizIndex(v=>v+1);};
+  const resetQuiz=()=>{setQuizIndex(0);setQuizScore(0);setQuizDone(false);};
+
   const submitEntry = async (slug: string) => {
     if (!supabase || !user) { setError("Войди в аккаунт, чтобы участвовать."); return; }
     const url = (entryUrls[slug] ?? "").trim();
@@ -221,12 +234,12 @@ export default function WinterFestPage() {
   const rarityLabel: Record<string, string> = { common: "Обычный", rare: "Редкий", epic: "Эпический", legendary: "Легендарный" };
 
   return (
-    <main data-theme={store.settings.theme} className="winter-page h-dvh max-h-dvh min-h-0 overflow-y-auto overscroll-y-contain touch-pan-y bg-[#07101b] px-4 py-7 text-white sm:px-6">
-      <div className="mx-auto max-w-5xl">
+    <main data-theme={store.settings.theme} className="winter-page relative h-dvh max-h-dvh min-h-0 overflow-y-auto overscroll-y-contain touch-pan-y bg-[#07101b] px-4 py-7 text-white sm:px-6">\n      <div aria-hidden className="winter-snow-decor"><span>❄</span><span>✦</span><span>❄</span><span>✧</span><span>❄</span></div>
+      <div className="relative z-10 mx-auto max-w-5xl">
         <Link href="/" className="inline-flex rounded-full border border-white/15 px-4 py-2 text-sm text-white/75 hover:bg-white/10">← Назад в TikTok Mod Web</Link>
         <div className="mt-4 flex justify-end"><Link href="/winter-fest/admin" className="rounded-full border border-amber-200/30 bg-amber-200/10 px-4 py-2 text-xs font-bold text-amber-100">⚙ Админ-панель</Link></div>
-        <header className="relative mt-7 overflow-hidden rounded-[2rem] border border-cyan-100/15 bg-gradient-to-br from-[#102b40] via-[#123c4a] to-[#261e45] p-6 shadow-2xl sm:p-10">
-          <div className="pointer-events-none absolute -right-8 -top-12 text-[10rem] opacity-10">❄️</div>
+        <header className="winter-hero relative mt-7 overflow-hidden rounded-[2rem] border border-cyan-100/20 bg-gradient-to-br from-[#102b40] via-[#123c4a] to-[#261e45] p-6 shadow-2xl sm:p-10">
+          <div className="pointer-events-none absolute -right-8 -top-12 text-[10rem] opacity-10">❄️</div><div className="pointer-events-none absolute -bottom-8 -left-5 rotate-12 text-7xl opacity-10">🎄</div><div className="pointer-events-none absolute right-16 top-5 text-3xl opacity-40">✨</div>
           <p className="text-xs font-bold uppercase tracking-[0.3em] text-cyan-200">TikTok Mod Web presents</p>
           {testPreview && <span className="mt-3 inline-flex rounded-full border border-amber-200/30 bg-amber-200/10 px-3 py-1 text-[10px] font-black tracking-widest text-amber-100">TEST MODE · ТОЛЬКО ДЛЯ АДМИНА</span>}
           <h1 className="mt-3 text-4xl font-black tracking-tight sm:text-6xl">Winter Fest <span className="text-cyan-200">2027</span></h1>
@@ -265,7 +278,17 @@ export default function WinterFestPage() {
             </div>
           </section>
 
-          <section className="mt-8">
+                    {clicker.level>=20&&<div className="mt-4 flex items-center gap-3 rounded-2xl border border-amber-200/30 bg-gradient-to-r from-amber-200/15 to-yellow-100/5 p-4"><span className="text-4xl">🏆</span><div><b className="text-amber-100">Трофей: Легенда снежного клика</b><p className="mt-1 text-xs text-white/60">Эксклюзивный легендарный значок автоматически добавлен в коллекцию.</p></div></div>}
+          <section className="mt-8 rounded-[2rem] border border-violet-200/20 bg-gradient-to-br from-[#211a3d] via-[#1b2946] to-[#103b46] p-5 shadow-xl sm:p-7">
+            <div className="mb-5"><p className="text-xs font-bold uppercase tracking-[.25em] text-violet-200/70">02 · Snow Arcade</p><h2 className="mt-1 text-2xl font-black">Зимняя игровая зона</h2><p className="mt-1 text-sm text-white/55">Три мини-игры, чтобы отвлечься от сбора монет.</p></div>
+            <div className="grid gap-4 lg:grid-cols-3">
+              <article className="rounded-2xl border border-white/10 bg-black/20 p-4"><div className="flex items-center justify-between"><b>🧠 Снежная память</b><span className="text-xs text-cyan-100">{memoryMatches.length/2}/5</span></div><p className="mt-2 text-xs text-white/50">Открой одинаковые символы.</p><div className="mt-3 grid grid-cols-5 gap-2">{memoryDeck.map((symbol,index)=><button key={index} onClick={()=>pickMemoryCard(index)} disabled={memoryMatches.includes(index)} className={`aspect-square rounded-xl border text-xl ${memoryMatches.includes(index)||memoryPicks.includes(index)?"border-emerald-200/40 bg-emerald-200/20":"border-white/10 bg-white/10"}`}>{memoryMatches.includes(index)||memoryPicks.includes(index)?symbol:"❔"}</button>)}</div>{memoryMatches.length===10?<p className="mt-3 text-xs font-bold text-emerald-200">Все пары найдены! 🎉</p>:<p className="mt-3 text-xs text-white/45">Совпадений: {memoryMatches.length/2} из 5</p>}<button onClick={resetMemory} className="mt-3 rounded-lg border border-white/15 px-3 py-2 text-xs">Перемешать</button></article>
+              <article className="rounded-2xl border border-white/10 bg-black/20 p-4"><div className="flex items-center justify-between"><b>❄️ Зимняя викторина</b><span className="text-xs text-cyan-100">{quizDone?"Готово":`${quizIndex+1}/3`}</span></div>{quizDone?<div className="mt-5 rounded-xl bg-white/5 p-4 text-center"><p className="text-3xl">🏅</p><b className="mt-2 block text-xl">{quizScore}/3 правильных</b><button onClick={resetQuiz} className="mt-4 rounded-lg bg-violet-200 px-4 py-2 text-xs font-bold text-slate-950">Ещё раз</button></div>:<><p className="mt-5 min-h-14 text-sm font-semibold">{WINTER_QUIZ[quizIndex].q}</p><div className="mt-3 grid gap-2">{WINTER_QUIZ[quizIndex].a.map((answer,index)=><button key={answer} onClick={()=>answerQuiz(index)} className="rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-left text-xs hover:bg-white/10">{answer}</button>)}</div></>}</article>
+              <article className="rounded-2xl border border-white/10 bg-black/20 p-4"><div className="flex items-center justify-between"><b>🔎 Охота за снежинками</b><span className="text-xs text-cyan-100">{snowHunt}/12</span></div><p className="mt-2 text-xs text-white/50">Собери коллекцию из двенадцати снежинок.</p><div className="my-5 flex min-h-28 items-center justify-center rounded-2xl border border-cyan-100/10 bg-gradient-to-br from-cyan-100/10 to-indigo-200/10"><span className="text-6xl">{snowHunt===12?"🎁":"❄️"}</span></div><div className="h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-cyan-200 transition-all" style={{width:`${snowHunt/12*100}%`}}/></div><button disabled={snowHunt>=12} onClick={()=>setSnowHunt(v=>Math.min(12,v+1))} className="mt-3 w-full rounded-xl bg-cyan-200 px-3 py-3 text-xs font-black text-slate-950 disabled:opacity-40">{snowHunt===12?"Коллекция собрана!":"Найти снежинку"}</button>{snowHunt===12&&<button onClick={()=>setSnowHunt(0)} className="mt-2 w-full rounded-lg border border-white/15 px-3 py-2 text-xs">Начать снова</button>}</article>
+            </div>
+          </section>
+
+<section className="mt-8">
             <div className="mb-4"><p className="text-xs font-bold uppercase tracking-[0.25em] text-cyan-200/65">02 · Advent</p><h2 className="mt-1 text-2xl font-extrabold">Адвент-календарь</h2><p className="mt-1 text-sm text-white/45">Один подарок на каждый день. Будущие даты закрыты, повторно забрать награду нельзя.</p></div>
             <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 md:grid-cols-8">
               {rewards.map((reward) => {
@@ -283,7 +306,7 @@ export default function WinterFestPage() {
           </section>
 
           <section className="mt-9">
-            <p className="text-xs font-bold uppercase tracking-[0.25em] text-cyan-200/65">03 · Quests</p><h2 className="mt-1 text-2xl font-extrabold">Праздничные задания</h2>
+            <p className="text-xs font-bold uppercase tracking-[0.25em] text-cyan-200/65">04 · Quests</p><h2 className="mt-1 text-2xl font-extrabold">Праздничные задания</h2>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               {quests.map((quest) => {
                 const row = progressFor(quest);
@@ -302,7 +325,7 @@ export default function WinterFestPage() {
           </section>
 
           <section className="mt-9">
-            <p className="text-xs font-bold uppercase tracking-[0.25em] text-cyan-200/65">04 · Shop</p><h2 className="mt-1 text-2xl font-extrabold">Магазин украшений</h2>
+            <p className="text-xs font-bold uppercase tracking-[0.25em] text-cyan-200/65">05 · Shop</p><h2 className="mt-1 text-2xl font-extrabold">Магазин украшений</h2>
             <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {items.map((item) => {
                 const isOwned = owned.includes(item.slug);
@@ -319,7 +342,7 @@ export default function WinterFestPage() {
           </section>
 
           <section className="mt-9">
-            <p className="text-xs font-bold uppercase tracking-[0.25em] text-cyan-200/65">05 · Competitions</p><h2 className="mt-1 text-2xl font-extrabold">Новогодние конкурсы</h2>
+            <p className="text-xs font-bold uppercase tracking-[0.25em] text-cyan-200/65">06 · Competitions</p><h2 className="mt-1 text-2xl font-extrabold">Новогодние конкурсы</h2>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               {competitions.length ? competitions.map((competition) => <article key={competition.slug} className="rounded-2xl border border-white/10 bg-white/[0.04] p-4"><h3 className="font-bold">{competition.title}</h3><p className="mt-2 text-sm text-white/50">{competition.description}</p><p className="mt-3 text-xs text-cyan-100/60">Статус: {competition.status}</p>{competition.winner_user_id && <p className="mt-2 text-xs text-emerald-200">Победитель определён организатором.</p>}<div className="mt-3 border-t border-white/10 pt-3"><p className="text-xs font-semibold text-white/60">Участники: {entries.filter((entry) => entry.competition_slug === competition.slug).length}</p>{entries.filter((entry) => entry.competition_slug === competition.slug).slice(0,8).map((entry) => <div key={entry.id} className="mt-2 flex items-center justify-between gap-2 text-xs"><span className="truncate text-white/55">@{entry.profile?.username ?? "участник"}</span><a href={entry.video_url} target="_blank" rel="noopener noreferrer" className="shrink-0 text-cyan-200 underline">Видео ↗</a></div>)}</div>{competition.status === "open" && <div className="mt-3 space-y-2"><input value={entryUrls[competition.slug] ?? ""} onChange={(event) => setEntryUrls((values) => ({...values,[competition.slug]:event.target.value}))} placeholder="HTTPS-ссылка на TikTok" className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm outline-none focus:border-cyan-200/50" /><button disabled={!user || busy !== null} onClick={() => void submitEntry(competition.slug)} className="rounded-lg bg-cyan-200 px-3 py-2 text-xs font-bold text-slate-950 disabled:opacity-40">Отправить заявку</button></div>}</article>) : <p className="text-sm text-white/45">Конкурсы пока не опубликованы организатором.</p>}
             </div>
