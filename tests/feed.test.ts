@@ -40,9 +40,9 @@ test("индекс не выходит за границы ленты", () => {
   assert.equal(clampIndex(3, 0), 0);
 });
 
-test("тяжёлый iframe монтируется только у текущего ролика, соседи — постеры", () => {
-  assert.deepEqual(playerIndexes(0, 10), [0]);
-  assert.deepEqual(playerIndexes(8, 10), [8]);
+test("текущий и следующий iframe прогреваются заранее, дальние соседи остаются постерами", () => {
+  assert.deepEqual(playerIndexes(0, 10), [0, 1]);
+  assert.deepEqual(playerIndexes(8, 10), [8, 9]);
   assert.deepEqual(playerIndexes(9, 10), [9]);
   assert.deepEqual(playerIndexes(10, 10), []);
   assert.deepEqual(visibleIndexes(5, 10), [4, 5, 6]);
