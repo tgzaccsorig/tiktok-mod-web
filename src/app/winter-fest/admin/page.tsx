@@ -18,6 +18,7 @@ export default function WinterFestAdminPage() {
   const [competitions, setCompetitions] = useState<any[]>([]);
   const [rewards, setRewards] = useState<any[]>([]);
   const [entries, setEntries] = useState<any[]>([]);
+  const [eventSettings, setEventSettings] = useState({test_mode:false,test_date:"2026-12-20"});
   const [winner, setWinner] = useState<Record<string,string>>({});
   const [item, setItem] = useState({slug:"",name:"",description:"",icon:"❄️",rarity:"common",slot:"frame",price:"50"});
   const [quest, setQuest] = useState({slug:"",title:"",description:"",action_key:"like",cadence:"daily",goal:"1",reward_coins:"10",starts_on:"2026-12-20"});
@@ -34,7 +35,8 @@ export default function WinterFestAdminPage() {
       supabase.from("winter_quests").select("*").order("slug"),
       supabase.from("winter_competitions").select("*").order("starts_at"),
       supabase.from("winter_advent_rewards").select("*").order("day"),
-      supabase.from("winter_competition_entries").select("id,competition_slug,user_id,video_url,profile:profiles!winter_competition_entries_user_id_fkey(username)").order("created_at",{ascending:false})
+      supabase.from("winter_competition_entries").select("id,competition_slug,user_id,video_url,profile:profiles!winter_competition_entries_user_id_fkey(username)").order("created_at",{ascending:false}),
+      supabase.from("winter_event_settings").select("test_mode,test_date").eq("id",true).single()
     ]);
     const failed = results.find((result)=>result.error)?.error;
     if (failed) setError(failed.message);
@@ -44,6 +46,7 @@ export default function WinterFestAdminPage() {
       setCompetitions(results[2].data ?? []);
       setRewards(results[3].data ?? []);
       setEntries(results[4].data ?? []);
+      setEventSettings({test_mode:results[5].data?.test_mode ?? false,test_date:results[5].data?.test_date ?? "2026-12-20"});
     }
     setLoading(false);
   },[supabase]);
@@ -60,6 +63,7 @@ export default function WinterFestAdminPage() {
   const createItem=()=>save(()=>supabase!.from("winter_shop_items").insert({...item,price:Number(item.price),active:true}),"Предмет добавлен.");
   const createQuest=()=>save(()=>supabase!.from("winter_quests").insert({...quest,goal:Number(quest.goal),reward_coins:Number(quest.reward_coins),active:true}),"Задание добавлено.");
   const createCompetition=()=>save(()=>supabase!.from("winter_competitions").insert({...competition,starts_at:new Date(competition.starts_at).toISOString()}),"Конкурс создан.");
+  const saveEventSettings=()=>save(()=>supabase!.from("winter_event_settings").update({test_mode:eventSettings.test_mode,test_date:eventSettings.test_date,updated_at:new Date().toISOString()}).eq("id",true),"Настройки тестового режима сохранены.");
   const updateReward=(day:string,value:number)=>save(()=>supabase!.from("winter_advent_rewards").update({reward_coins:value}).eq("day",day),"Награда календаря обновлена.");
   const updateItem=(slug:string,changes:Record<string,unknown>)=>save(()=>supabase!.from("winter_shop_items").update(changes).eq("slug",slug),"Предмет обновлён.");
   const updateQuest=(slug:string,changes:Record<string,unknown>)=>save(()=>supabase!.from("winter_quests").update(changes).eq("slug",slug),"Задание обновлено.");
@@ -75,6 +79,13 @@ export default function WinterFestAdminPage() {
         <header className="mt-7"><p className="text-xs font-bold uppercase tracking-[0.25em] text-cyan-200/60">Winter Fest 2027</p><h1 className="mt-2 text-3xl font-black">Управление событием</h1><p className="mt-2 text-sm text-white/45">Доступ только для аккаунтов с серверной ролью app_metadata.role = admin.</p></header>
         {error && <p role="alert" className="mt-5 rounded-xl border border-red-300/20 bg-red-300/5 p-3 text-sm text-red-100">{error}</p>}
         {message && <p role="status" className="mt-5 rounded-xl border border-emerald-300/20 bg-emerald-300/5 p-3 text-sm text-emerald-100">{message}</p>}
+        {admin && <section className="mt-6 rounded-2xl border border-amber-200/25 bg-amber-200/[0.06] p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-widest text-amber-200">Режим разработчика</p><h2 className="mt-1 text-xl font-bold">Тестирование Winter Fest</h2><p className="mt-1 text-sm text-white/55">Только твой аккаунт увидит событие раньше официального старта. Обычные пользователи останутся на экране ожидания.</p></div><span className={eventSettings.test_mode?"rounded-full bg-emerald-300/15 px-3 py-1 text-xs font-bold text-emerald-200":"rounded-full bg-white/10 px-3 py-1 text-xs text-white/60"}>{eventSettings.test_mode?"ТЕСТ ВКЛЮЧЁН":"ТЕСТ ВЫКЛЮЧЕН"}</span></div>
+          <label className="mt-4 flex items-center gap-3 rounded-xl border border-white/10 p-3"><input type="checkbox" checked={eventSettings.test_mode} onChange={e=>setEventSettings({...eventSettings,test_mode:e.target.checked})} /><span className="text-sm font-semibold">Включить тестовый режим события</span></label>
+          <label className="mt-3 block text-xs text-white/55">Тестовая дата (по времени Хельсинки)<input type="date" min="2026-12-01" max="2026-12-24" value={eventSettings.test_date} onChange={e=>setEventSettings({...eventSettings,test_date:e.target.value})} className="admin-input mt-2"/></label>
+          <p className="mt-2 text-xs text-white/45">Для проверки всех функций поставь 24 декабря 2026 года. В тесте будут работать реальные записи твоего аккаунта в базе, поэтому тестовые SnowCoins и покупки будут сохранены.</p>
+          <button disabled={saving} onClick={()=>void saveEventSettings()} className="mt-4 rounded-xl bg-amber-200 px-4 py-3 text-sm font-bold text-slate-950 disabled:opacity-40">Сохранить настройки теста</button>
+        </section>}
         {loading ? <p className="mt-6 text-sm text-white/50">Проверяю права доступа…</p> : !admin ? <section className="mt-6 rounded-2xl border border-amber-200/20 bg-amber-200/5 p-5"><h2 className="font-bold">Нет доступа</h2><p className="mt-2 text-sm text-white/60">Обычные данные профиля не дают административных прав. Нужна роль admin в app_metadata.</p></section> : <>
           <div className="mt-8 grid gap-5 lg:grid-cols-2">
             <section className="rounded-2xl border border-white/10 bg-white/[0.04] p-5"><h2 className="text-xl font-bold">Магазин: новый предмет</h2><div className="mt-4 grid gap-3">
