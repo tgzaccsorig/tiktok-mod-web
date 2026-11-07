@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
+import { useStore } from "@/hooks/useStore";
 
 type Profile = { id: string; username: string; display_name: string | null; bio: string | null; avatar_url: string | null; created_at: string };
 type Video = { video_id: string; video_url: string; title: string; author: string; created_at: string; thumbnail: string | null };
@@ -13,6 +14,7 @@ export default function PublicUserPage() {
   const params = useParams<{ username: string }>();
   const username = decodeURIComponent(params.username ?? "").toLowerCase();
   const supabase = useMemo(() => getSupabase(), []);
+  const [store] = useStore();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [videos, setVideos] = useState<Video[]>([]);
   const [decorations, setDecorations] = useState<Decoration[]>([]);
@@ -58,7 +60,7 @@ export default function PublicUserPage() {
   }, [supabase, username]);
 
   return (
-    <main className="min-h-dvh overflow-y-auto bg-[#090b12] px-4 py-6 text-white sm:px-6">
+    <main data-theme={store.settings.theme} className="public-user-page min-h-dvh overflow-y-auto bg-[#090b12] px-4 py-6 text-white sm:px-6">
       <div className="mx-auto max-w-3xl">
         <Link href="/search" className="inline-flex rounded-full border border-white/15 px-4 py-2 text-sm text-white/75 hover:bg-white/10">← К поиску</Link>
         {loading && <p className="mt-8 text-sm text-white/55">Загружаю профиль…</p>}
