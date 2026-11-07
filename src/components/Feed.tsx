@@ -1025,7 +1025,7 @@ export default function Feed() {
           <span aria-hidden="true">＋</span><small>Добавить</small>
         </button>
         <a href="/updates" aria-label="Update Log" data-testid="mobile-updates-link" className="mobile-nav-link">
-          <span aria-hidden="true">↻</span><small>Update Log</small>
+          <span aria-hidden="true">↻</span><small>Обновления</small>
         </a>
         <button type="button" aria-label="Профиль" onClick={() => setAccountOpen(true)}>
           <span aria-hidden="true">♙</span><small>Профиль</small>
