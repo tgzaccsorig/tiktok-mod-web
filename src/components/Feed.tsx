@@ -419,16 +419,12 @@ export default function Feed() {
       clearTimeout(fallbackRef.current);
       fallbackRef.current = setTimeout(() => {
         if (confirmedRef.current || currentKeyRef.current !== key) return;
-        if (readyRef.current.has(key)) {
-          // плеер готов, но не играет (обычно запрет автозапуска) — просим коснуться экрана
-          setNeedsTap(true);
-          setPlayback("paused");
-          return;
-        }
-        // плеер вообще не ответил: одна перезагрузка, затем ошибка с кнопкой «Повторить»
+        // Не заставляем пользователя вручную перебирать зависшие/недоступные ролики.
+        // Делаем одну повторную загрузку, затем автоматически убираем ролик из очереди.
         const n = reloadCountRef.current[key] ?? 0;
         if (n >= 1) {
-          setPlayback("error");
+          const id = queueRef.current.find((s) => s.key === key)?.item.id;
+          if (id) dropVideo(id, "Ролик не загрузился — пропущен");
           return;
         }
         reloadCountRef.current[key] = n + 1;
