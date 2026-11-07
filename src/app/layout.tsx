@@ -28,7 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {children}
         <a
           href="/updates"
-          className="fixed right-3 top-24 z-50 max-sm:bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] max-sm:top-auto rounded-full border border-white/20 bg-black/75 px-3 py-2 text-xs font-semibold text-white shadow-lg backdrop-blur transition hover:bg-white/15"
+          className="fixed right-3 top-24 z-50 hidden rounded-full sm:inline-flex border border-white/20 bg-black/75 px-3 py-2 text-xs font-semibold text-white shadow-lg backdrop-blur transition hover:bg-white/15"
         >
           Обновления
         </a>
