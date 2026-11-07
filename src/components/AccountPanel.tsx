@@ -320,7 +320,7 @@ export default function AccountPanel({ open, onClose, onUserChange }: Props) {
 
   return (
     <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/75 sm:items-center" onClick={onClose}>
-      <section className="account-panel max-h-[92dvh] w-full max-w-xl overflow-y-auto overscroll-contain rounded-t-2xl border border-white/10 bg-neutral-950 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
+      <section className="account-panel touch-pan-y min-h-0 max-h-[92dvh] w-full max-w-xl overflow-y-auto overscroll-y-contain rounded-t-2xl border border-white/10 bg-neutral-950 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
         <header className="mb-4 flex items-center justify-between">
           <div><p className="text-xs uppercase tracking-widest text-cyan-300">TikTok Mod Web</p><h2 className="text-xl font-bold">Аккаунт и сообщество</h2></div>
           <button onClick={onClose} className={buttonClass}>Закрыть</button>
