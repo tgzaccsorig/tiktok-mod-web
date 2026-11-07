@@ -68,11 +68,15 @@ export default function PublicUserPage() {
         {profile && <>
           <header className="mt-8 rounded-3xl border border-white/10 bg-white/[0.04] p-6">
             <div className="flex items-center gap-4">
-              {profile.avatar_url ? <img src={profile.avatar_url} alt="" className="h-20 w-20 rounded-full object-cover" /> : <div className="grid h-20 w-20 place-items-center rounded-full bg-cyan-300/15 text-3xl">♙</div>}
+              <div className={"relative grid h-20 w-20 shrink-0 place-items-center overflow-visible rounded-full " + (decorations.some((item) => item.slot === "frame") ? "ring-4 ring-amber-300 ring-offset-4 ring-offset-[#101827]" : "ring-2 ring-white/15") + (decorations.some((item) => item.slot === "background") ? " bg-gradient-to-br from-cyan-400/30 to-indigo-700/50" : " bg-cyan-300/15")}>
+                {profile.avatar_url?.startsWith("preset:") ? <span className="text-4xl">{profile.avatar_url.slice(7)}</span> : profile.avatar_url ? <img src={profile.avatar_url} alt="" className="h-20 w-20 rounded-full object-cover" /> : <span className="text-3xl">👤</span>}
+                {decorations.filter((item) => item.slot === "badge").map((item) => <span key={item.item_slug} title={item.name} className="absolute -bottom-1 -right-1 grid h-8 w-8 place-items-center rounded-full border-2 border-[#101827] bg-cyan-200 text-lg text-slate-950">{item.icon}</span>)}
+              </div>
               <div className="min-w-0"><h1 className="truncate text-2xl font-extrabold">{profile.display_name || profile.username}</h1><p className="text-sm text-white/45">@{profile.username}</p></div>
             </div>
+            {decorations.some((item) => item.slot === "title") && <p className="mt-3 text-sm font-bold text-amber-200">{decorations.filter((item) => item.slot === "title").map((item) => item.icon + " " + item.name).join(" · ")}</p>}
             {profile.bio && <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-white/75">{profile.bio}</p>}
-            {decorations.length > 0 && <div className="mt-4 flex flex-wrap gap-2">{decorations.map((item) => <span key={item.slot} title={item.name} className="rounded-full border border-cyan-100/20 bg-cyan-100/10 px-3 py-1 text-xs text-cyan-50">{item.icon} {item.name}</span>)}</div>}
+            {decorations.some((item) => item.slot === "background") && <p className="mt-3 text-xs text-cyan-100/70">{decorations.find((item) => item.slot === "background")?.icon} {decorations.find((item) => item.slot === "background")?.name}</p>}
             <p className="mt-4 text-xs text-white/35">Публикации: {videos.length}</p>
           </header>
           <section className="mt-7">
