@@ -187,7 +187,7 @@ export default function WinterFestPage() {
   const rarityLabel: Record<string, string> = { common: "Обычный", rare: "Редкий", epic: "Эпический", legendary: "Легендарный" };
 
   return (
-    <main data-theme={store.settings.theme} className="winter-page min-h-dvh overflow-y-auto bg-[#07101b] px-4 py-7 text-white sm:px-6">
+    <main data-theme={store.settings.theme} className="winter-page h-dvh max-h-dvh min-h-0 overflow-y-auto overscroll-y-contain touch-pan-y bg-[#07101b] px-4 py-7 text-white sm:px-6">
       <div className="mx-auto max-w-5xl">
         <Link href="/" className="inline-flex rounded-full border border-white/15 px-4 py-2 text-sm text-white/75 hover:bg-white/10">← Назад в TikTok Mod Web</Link>
         <div className="mt-4 flex justify-end"><Link href="/winter-fest/admin" className="rounded-full border border-amber-200/30 bg-amber-200/10 px-4 py-2 text-xs font-bold text-amber-100">⚙ Админ-панель</Link></div>
