@@ -418,36 +418,22 @@ export default function Feed() {
       post(key, soundRef.current ? "unMute" : "mute");
       post(key, "play");
       ensureSound(key);
-      const skipFailedVideo = () => {
-        const id = queueRef.current.find((s) => s.key === key)?.item.id;
-        if (!id) return;
-        const q = queueRef.current;
-        const cur = indexRef.current;
-        const kept = q.filter((slide) => slide.item.id !== id);
-        const nextIndex = clampIndex(q.slice(0, cur).filter((slide) => slide.item.id !== id).length, kept.length);
-        queueRef.current = kept;
-        indexRef.current = nextIndex;
-        setRemoved((items) => (items.includes(id) ? items : [...items, id]));
-        setQueue(kept);
-        setIndex(nextIndex);
-        applyTransform(0, false);
-        showToast("Ролик не загрузился — пропущен");
-      };
       clearTimeout(fallbackRef.current);
       fallbackRef.current = setTimeout(() => {
         if (confirmedRef.current || currentKeyRef.current !== key) return;
-        // Одна повторная загрузка; если плеер снова не отвечает, автоматически пропускаем ролик.
+        // Тайм-аут сам по себе не доказывает, что ролик удалён: TikTok может долго отвечать.
+        // Делаем одну повторную загрузку, затем показываем действия вместо бесконечного автопропуска.
         const n = reloadCountRef.current[key] ?? 0;
         if (n >= 1) {
-          skipFailedVideo();
+          setPlayback("error");
           return;
         }
         reloadCountRef.current[key] = n + 1;
         reloadCurrent(!soundRef.current);
         fallbackRef.current = setTimeout(() => {
-          if (!confirmedRef.current && currentKeyRef.current === key) skipFailedVideo();
-        }, 6000);
-      }, 7000);
+          if (!confirmedRef.current && currentKeyRef.current === key) setPlayback("error");
+        }, 8000);
+      }, 10000);
     },
     [post, reloadCurrent, ensureSound, applyTransform, showToast],
   );
@@ -604,14 +590,22 @@ export default function Feed() {
           const v = d.value as { errorCode?: number } | number | undefined;
           const code = typeof v === "number" ? v : v?.errorCode;
           if (code === 1001) {
+            // TikTok explicitly reports INVALID_VIDEO: this individual item can be removed.
             const id = queueRef.current.find((s) => s.key === key)?.item.id;
             if (id) dropVideo(id);
           } else if (code === 3002) {
             setNeedsTap(true);
             setPlayback("paused");
           } else {
-            const id = queueRef.current.find((s) => s.key === key)?.item.id;
-            if (id) dropVideo(id);
+            // Network/server/playback errors are not proof that the video is unavailable.
+            // Retry once, then let the viewer retry or skip manually.
+            const attempts = reloadCountRef.current[key] ?? 0;
+            if (attempts < 1) {
+              reloadCountRef.current[key] = attempts + 1;
+              reloadCurrent(!soundRef.current);
+            } else {
+              setPlayback("error");
+            }
           }
           break;
         }
