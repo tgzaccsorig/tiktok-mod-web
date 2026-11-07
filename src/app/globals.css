@@ -92,9 +92,17 @@ body {
   .feed-action-rail > button > span:last-child { display:none; }
   .feed-caption { padding-right:4.25rem; }
 }
+@media (max-width: 420px) {
+  .account-inline-row { grid-template-columns:minmax(0,1fr) !important; }
+  .account-inline-row > button { width:100%; }
+}
 @media (max-width: 360px) {
   .feed-header > .feed-logo { max-width:112px; font-size:12px; }
   .feed-header > div { gap:3px; }
   .feed-icon-button { min-width:36px; min-height:36px; padding:6px; }
   .feed-action-rail > button { width:42px; min-width:42px; height:42px; min-height:42px; }
+}
+@media (max-height: 620px) and (max-width: 639px) {
+  .feed-action-rail { gap:6px !important; bottom:calc(env(safe-area-inset-bottom) + 4.5rem); }
+  .feed-action-rail > button { width:40px; min-width:40px; height:40px; min-height:40px; }
 }
