@@ -5,6 +5,7 @@ import type { User } from "@supabase/supabase-js";
 import { getSupabase, type AccountIdentity } from "@/lib/supabase";
 import { normalizeUrl } from "@/lib/tiktok";
 import type { VideoItem } from "@/lib/types";
+import AvatarCustomizer from "@/components/AvatarCustomizer";
 
 type Profile = {
   id: string;
@@ -363,7 +364,7 @@ export default function AccountPanel({ open, onClose, onUserChange }: Props) {
 
   return (
     <div className="fixed inset-0 z-[70] flex items-end justify-center overflow-hidden py-3 bg-black/75 sm:items-center" onClick={onClose}>
-      <section className="account-panel h-[92dvh] min-h-0 max-h-[92dvh] w-full max-w-xl flex-none overflow-x-hidden overflow-y-auto overscroll-y-contain touch-pan-y rounded-t-2xl border border-white/10 bg-neutral-950 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
+      <section className="account-panel h-[92dvh] min-h-0 max-h-[92dvh] w-full max-w-5xl flex-none overflow-x-hidden overflow-y-auto overscroll-y-contain touch-pan-y rounded-t-2xl border border-white/10 bg-neutral-950 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
         <header className="mb-4 flex items-center justify-between">
           <div><p className="text-xs uppercase tracking-widest text-cyan-300">TikTok Mod Web</p><h2 className="text-xl font-bold">Аккаунт и сообщество</h2></div>
           <button onClick={onClose} className={buttonClass}>Закрыть</button>
@@ -383,9 +384,9 @@ export default function AccountPanel({ open, onClose, onUserChange }: Props) {
             <button className="w-full rounded-lg bg-cyan-400 py-3 font-bold text-black disabled:opacity-40" disabled={busy || !email.trim() || password.length < 6 || (mode === "signup" && !username.trim())} onClick={submitAuth}>{busy ? "Подожди…" : mode === "login" ? "Войти" : "Создать аккаунт"}</button>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-[minmax(0,1fr)_280px]">
             {!viewed ? (
-              <>
+              <div className="min-w-0 space-y-4">
                 <div className="rounded-xl bg-white/5 p-3">
                   <div className="flex items-center justify-between gap-3"><div className="min-w-0"><p className="truncate font-semibold">{profile?.display_name || user.email}</p><p className="text-sm text-neutral-400">@{profile?.username || "профиль ещё создаётся"}</p></div><button className={buttonClass} onClick={signOut}>Выйти</button></div>
                   <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs"><Stat label="Подписчики" value={counts.followers}/><Stat label="Подписки" value={counts.following}/><Stat label="Лайки" value={counts.likes}/></div>
@@ -440,9 +441,9 @@ export default function AccountPanel({ open, onClose, onUserChange }: Props) {
                     </>
                   )}
                 </div>
-              </>
+              </div>
             ) : (
-              <div className="space-y-3">
+              <div className="min-w-0 space-y-3">
                 <button className={buttonClass} onClick={() => { setViewed(null); void loadStats(user.id); void loadPublishedVideos(user.id); }}>← Мой аккаунт</button>
                 <div className="rounded-xl bg-white/5 p-4"><h3 className="text-lg font-bold">{viewed.display_name || viewed.username}</h3><p className="text-sm text-cyan-300">@{viewed.username}</p><p className="mt-2 whitespace-pre-wrap text-sm text-neutral-300">{viewed.bio || "Пользователь пока ничего не рассказал о себе."}</p><div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs"><Stat label="Подписчики" value={counts.followers}/><Stat label="Подписки" value={counts.following}/><Stat label="Лайки" value={counts.likes}/></div>{viewed.id !== user.id && <button className="mt-3 w-full rounded-lg bg-cyan-400 py-2 font-semibold text-black disabled:opacity-40" disabled={busy} onClick={toggleFollow}>{following ? "Отписаться" : "Подписаться"}</button>}</div>
                 <div className="space-y-2 border-t border-white/10 pt-3">
@@ -454,6 +455,7 @@ export default function AccountPanel({ open, onClose, onUserChange }: Props) {
                 <div className="space-y-1 text-sm text-neutral-300">{lists[tab].map((id, i) => <p key={id + i} className="rounded bg-white/5 px-2 py-1">Видео ID: {id}</p>)}</div>
               </div>
             )}
+            {!viewed && <AvatarCustomizer user={user} profile={profile} onProfileChange={setProfile} />}
           </div>
         )}
         {message && <p className="mt-3 rounded-lg bg-cyan-400/10 p-2 text-sm text-cyan-200">{message}</p>}
