@@ -6,6 +6,6 @@ export const runtime = "nodejs";
 /** GET /api/oembed?url=<ссылка на видео TikTok> — проверка ссылки через официальный oEmbed TikTok. */
 export async function GET(req: Request) {
   const url = new URL(req.url).searchParams.get("url") ?? "";
-  const result = await fetchOembed(url);
+  const result = await fetchOembed(url, { timeoutMs: 6000, retries: 0 });
   return NextResponse.json(result, { status: result.ok ? 200 : result.reason === "not_allowed" ? 400 : 200 });
 }
