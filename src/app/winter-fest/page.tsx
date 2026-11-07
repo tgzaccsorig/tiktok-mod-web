@@ -196,6 +196,7 @@ export default function WinterFestPage() {
           <section className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-cyan-100/15 bg-white/[0.05] p-5">
             <div><p className="text-xs uppercase tracking-widest text-cyan-200/65">Твой баланс</p><p className="mt-1 text-3xl font-black tabular-nums">{balance} <span className="text-lg text-cyan-200">SC</span></p></div>
             <div className="text-right text-xs text-white/45">{user ? `Аккаунт: @${user.user_metadata?.username ?? user.email ?? "пользователь"}` : "Войди в аккаунт, чтобы получать SnowCoins"}</div>
+            {user?.app_metadata?.role === "admin" && <Link href="/winter-fest/admin" className="rounded-full border border-cyan-100/20 px-3 py-2 text-xs font-bold text-cyan-100">Управление событием</Link>}
           </section>
 
           {error && <p role="alert" className="mt-4 rounded-xl border border-red-300/20 bg-red-300/5 p-3 text-sm text-red-100">{error}</p>}
