@@ -190,7 +190,7 @@ export default function WinterFestPage() {
     <main data-theme={store.settings.theme} className="winter-page min-h-dvh overflow-y-auto bg-[#07101b] px-4 py-7 text-white sm:px-6">
       <div className="mx-auto max-w-5xl">
         <Link href="/" className="inline-flex rounded-full border border-white/15 px-4 py-2 text-sm text-white/75 hover:bg-white/10">← Назад в TikTok Mod Web</Link>
-        {isAdmin && <div className="mt-4 flex justify-end"><Link href="/winter-fest/admin" className="rounded-full border border-amber-200/30 bg-amber-200/10 px-4 py-2 text-xs font-bold text-amber-100">⚙ Админ-панель</Link></div>}
+        <div className="mt-4 flex justify-end"><Link href="/winter-fest/admin" className="rounded-full border border-amber-200/30 bg-amber-200/10 px-4 py-2 text-xs font-bold text-amber-100">⚙ Админ-панель</Link></div>
         <header className="relative mt-7 overflow-hidden rounded-[2rem] border border-cyan-100/15 bg-gradient-to-br from-[#102b40] via-[#123c4a] to-[#261e45] p-6 shadow-2xl sm:p-10">
           <div className="pointer-events-none absolute -right-8 -top-12 text-[10rem] opacity-10">❄️</div>
           <p className="text-xs font-bold uppercase tracking-[0.3em] text-cyan-200">TikTok Mod Web presents</p>
