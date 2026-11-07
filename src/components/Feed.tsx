@@ -1023,8 +1023,8 @@ export default function Feed() {
       <div className="pointer-events-none absolute inset-x-0 top-0 z-30 bg-gradient-to-b from-black/70 to-transparent pt-[max(0.5rem,env(safe-area-inset-top))]">
         <div className="feed-header flex items-center justify-between px-3">
           <span className="logo-glitch feed-logo text-base font-extrabold tracking-tight">TikTok Mod Web</span>
-          <a href="/search" aria-label="Поиск" title="Поиск" className="feed-icon-button rounded-full px-2 py-2 text-sm font-semibold">⌕</a>
-          <a href="/winter-fest" aria-label="Winter Fest 2027" title="Winter Fest 2027" className="feed-icon-button rounded-full px-2 py-2 text-sm">❄</a>
+          <a href="/search" aria-label="Поиск" title="Поиск" className="pointer-events-auto feed-icon-button rounded-full px-2 py-2 text-sm font-semibold">⌕</a>
+          <a href="/winter-fest" aria-label="Winter Fest 2027" title="Winter Fest 2027" className="pointer-events-auto feed-icon-button rounded-full px-2 py-2 text-sm">❄</a>
           <div className="pointer-events-auto flex items-center gap-1">
             <button aria-label="Настройки" title="Настройки" onClick={() => setSettingsOpen(true)} className="feed-icon-button rounded-full p-2 text-lg">⚙</button>
             <button aria-label="Профиль и аккаунт" onClick={() => setAccountOpen(true)} className="feed-icon-button rounded-full px-2 py-1 text-lg">
