@@ -60,7 +60,7 @@ export default function PublicUserPage() {
   }, [supabase, username]);
 
   return (
-    <main data-theme={store.settings.theme} className="public-user-page min-h-dvh overflow-y-auto bg-[#090b12] px-4 py-6 text-white sm:px-6">
+    <main data-theme={store.settings.theme} className="public-user-page h-dvh min-h-0 overflow-y-scroll overscroll-y-contain touch-pan-y bg-[#090b12] px-4 py-6 text-white sm:px-6">
       <div className="mx-auto max-w-3xl">
         <Link href="/search" className="inline-flex rounded-full border border-white/15 px-4 py-2 text-sm text-white/75 hover:bg-white/10">← К поиску</Link>
         {loading && <p className="mt-8 text-sm text-white/55">Загружаю профиль…</p>}
