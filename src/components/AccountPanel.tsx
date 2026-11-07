@@ -40,6 +40,7 @@ export default function AccountPanel({ open, onClose, onUserChange }: Props) {
   const [publishUrl, setPublishUrl] = useState("");
   const [publishing, setPublishing] = useState(false);
   const [publishedVideos, setPublishedVideos] = useState<PublishedVideo[]>([]);
+  const [loadingPublications, setLoadingPublications] = useState(false);
   const [notifications, setNotifications] = useState<{
     id: string; type: "follow" | "like" | "comment"; video_id: string | null;
     created_at: string; read_at: string | null;
@@ -143,13 +144,44 @@ export default function AccountPanel({ open, onClose, onUserChange }: Props) {
 
   const loadPublishedVideos = async (id: string) => {
     if (!supabase) return;
-    const { data, error: videosError } = await supabase
-      .from("user_videos")
-      .select("id,video_id,video_url,title,author,created_at")
-      .eq("user_id", id)
-      .order("created_at", { ascending: false })
-      .limit(50);
-    if (!videosError) setPublishedVideos((data ?? []) as PublishedVideo[]);
+    setLoadingPublications(true);
+    try {
+      const { data, error: videosError } = await supabase
+        .from("user_videos")
+        .select("id,video_id,video_url,title,author,created_at")
+        .eq("user_id", id)
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (videosError) throw videosError;
+      setPublishedVideos((data ?? []) as PublishedVideo[]);
+    } catch (e) {
+      setError("Не удалось загрузить публикации: " + errorText(e));
+    } finally {
+      setLoadingPublications(false);
+    }
+  };
+
+  const ensureOwnProfile = async () => {
+    if (!supabase || !user) throw new Error("Сначала войди в аккаунт.");
+    const existing = await loadProfile(user.id);
+    if (existing) return existing;
+    const fallbackUsername = `user_${user.id.slice(0, 8)}`;
+    const { data, error: createError } = await supabase
+      .from("profiles")
+      .upsert({
+        id: user.id,
+        username: fallbackUsername,
+        display_name: user.email?.split("@")[0] || fallbackUsername,
+        bio: "",
+      }, { onConflict: "id" })
+      .select("*")
+      .single();
+    if (createError) throw new Error("Не удалось создать профиль: " + createError.message);
+    const created = data as Profile;
+    setProfile(created);
+    setUsername(created.username);
+    setDisplayName(created.display_name ?? created.username);
+    return created;
   };
 
 
@@ -192,11 +224,22 @@ export default function AccountPanel({ open, onClose, onUserChange }: Props) {
     setError("");
     setMessage("");
     try {
+      await ensureOwnProfile();
       const url = normalizeUrl(publishUrl);
-      const response = await fetch(`/api/oembed?url=${encodeURIComponent(url)}`);
+      const response = await fetch(`/api/oembed?url=${encodeURIComponent(url)}`, {
+        signal: AbortSignal.timeout(9000),
+      });
       const result = await response.json() as { ok: boolean; item?: VideoItem; reason?: string };
       if (!response.ok || !result.ok || !result.item) {
-        throw new Error("Не удалось проверить ссылку. Нужна ссылка на общедоступный ролик TikTok.");
+        const reason = result.reason;
+        const message = reason === "not_allowed"
+          ? "Подойдёт только HTTPS-ссылка на tiktok.com."
+          : reason === "not_video"
+            ? "Это ссылка не на отдельный ролик TikTok."
+            : reason === "unavailable"
+              ? "Ролик недоступен или удалён. Проверь ссылку и доступность видео."
+              : "TikTok не ответил вовремя. Попробуй ещё раз через минуту.";
+        throw new Error(message);
       }
       const item = result.item;
       const { error: insertError } = await supabase.from("user_videos").insert({
@@ -363,7 +406,8 @@ export default function AccountPanel({ open, onClose, onUserChange }: Props) {
                       </a>
                       <button className="text-xs text-red-300" onClick={() => void removePublishedVideo(video.id)}>Удалить</button>
                     </div>)}
-                    {!publishedVideos.length && <p className="text-xs text-neutral-500">Пока нет публикаций.</p>}
+                    {loadingPublications && <p className="text-xs text-neutral-400">Загружаю публикации…</p>}
+                    {!loadingPublications && !publishedVideos.length && <p className="text-xs text-neutral-500">Пока нет публикаций.</p>}
                   </div>
                 </div>
                 <div className="space-y-2 border-t border-white/10 pt-3"><h3 className="font-semibold">Поиск пользователей</h3><div className="account-inline-row grid grid-cols-[minmax(0,1fr)_auto] gap-2"><input className={inputClass} value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && searchUsers()} placeholder="Найти по никнейму"/><button className={buttonClass} onClick={searchUsers}>Найти</button></div>{results.map((p) => <button key={p.id} onClick={() => openUser(p)} className="flex w-full items-center justify-between rounded-lg bg-white/5 p-3 text-left"><span><b>{p.display_name || p.username}</b><span className="ml-2 text-sm text-neutral-400">@{p.username}</span></span><span>Открыть →</span></button>)}</div>
