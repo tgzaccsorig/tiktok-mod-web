@@ -47,6 +47,7 @@ export default function WinterFestPage() {
   const [now, setNow] = useState(() => new Date());
   const [user, setUser] = useState<User | null>(null);
   const [balance, setBalance] = useState(0);
+  const [eventSettings, setEventSettings] = useState({test_mode:false,test_date:"2026-12-20"});
   const [rewards, setRewards] = useState<Reward[]>([]);
   const [claims, setClaims] = useState<string[]>([]);
   const [items, setItems] = useState<ShopItem[]>([]);
@@ -63,22 +64,33 @@ export default function WinterFestPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const active = now.getTime() >= EVENT_START.getTime();
+  const isAdmin = user?.app_metadata?.role === "admin";
+  const testPreview = isAdmin && eventSettings.test_mode && eventSettings.test_date >= "2026-12-20";
+  const active = now.getTime() >= EVENT_START.getTime() || testPreview;
   const remaining = Math.max(0, EVENT_START.getTime() - now.getTime());
   const days = Math.floor(remaining / 86400000);
   const hours = Math.floor((remaining % 86400000) / 3600000);
   const minutes = Math.floor((remaining % 3600000) / 60000);
   const seconds = Math.floor((remaining % 60000) / 1000);
-  const today = helsinkiDate(now);
+  const today = isAdmin && eventSettings.test_mode ? eventSettings.test_date : helsinkiDate(now);
 
   const loadData = useCallback(async () => {
-    if (!supabase || new Date().getTime() < EVENT_START.getTime()) return;
+    if (!supabase) return;
     setLoading(true);
     setError("");
     try {
       const { data: auth } = await supabase.auth.getUser();
       const currentUser = auth.user ?? null;
       setUser(currentUser);
+      let settings = {test_mode:false,test_date:"2026-12-20"};
+      if (currentUser?.app_metadata?.role === "admin") {
+        const {data: eventData, error: settingsError} = await supabase.from("winter_event_settings").select("test_mode,test_date").eq("id",true).single();
+        if (settingsError) throw settingsError;
+        settings = {test_mode:eventData.test_mode,test_date:eventData.test_date};
+        setEventSettings(settings);
+      } else setEventSettings({test_mode:false,test_date:"2026-12-20"});
+      const preview = currentUser?.app_metadata?.role === "admin" && settings.test_mode && settings.test_date >= "2026-12-20";
+      if (new Date().getTime() < EVENT_START.getTime() && !preview) { setLoading(false); return; }
       const publicResults = await Promise.all([
         supabase.from("winter_advent_rewards").select("day,reward_coins,reward_title,icon,active").order("day"),
         supabase.from("winter_shop_items").select("slug,name,description,icon,rarity,slot,price").eq("active", true).order("price"),
@@ -124,9 +136,7 @@ export default function WinterFestPage() {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(timer);
   }, []);
-  useEffect(() => {
-    if (active) void loadData();
-  }, [active, loadData]);
+  useEffect(() => { void loadData(); }, [loadData]);
 
   const runAction = async (key: string, action: () => Promise<unknown>, success: string) => {
     if (!supabase || !user || busy) {
@@ -180,6 +190,7 @@ export default function WinterFestPage() {
     <main data-theme={store.settings.theme} className="winter-page min-h-dvh overflow-y-auto bg-[#07101b] px-4 py-7 text-white sm:px-6">
       <div className="mx-auto max-w-5xl">
         <Link href="/" className="inline-flex rounded-full border border-white/15 px-4 py-2 text-sm text-white/75 hover:bg-white/10">← Назад в TikTok Mod Web</Link>
+        {isAdmin && <div className="mt-4 flex justify-end"><Link href="/winter-fest/admin" className="rounded-full border border-amber-200/30 bg-amber-200/10 px-4 py-2 text-xs font-bold text-amber-100">⚙ Админ-панель</Link></div>}
         <header className="relative mt-7 overflow-hidden rounded-[2rem] border border-cyan-100/15 bg-gradient-to-br from-[#102b40] via-[#123c4a] to-[#261e45] p-6 shadow-2xl sm:p-10">
           <div className="pointer-events-none absolute -right-8 -top-12 text-[10rem] opacity-10">❄️</div>
           <p className="text-xs font-bold uppercase tracking-[0.3em] text-cyan-200">TikTok Mod Web presents</p>
@@ -194,7 +205,7 @@ export default function WinterFestPage() {
           </div> : <div className="mt-7 inline-flex items-center gap-2 rounded-full border border-emerald-200/20 bg-emerald-200/10 px-4 py-2 text-sm font-bold text-emerald-100">❄️ Winter Fest открыт</div>}
         </header>
 
-        {!active ? <section className="mt-6 rounded-2xl border border-white/10 bg-white/[0.04] p-5 text-sm leading-6 text-white/65">Мы готовим праздничные активности заранее. Страница события, календарь, задания и магазин станут доступны только после официального старта.</section> : <>
+        {!active ? <section className="mt-6 rounded-2xl border border-white/10 bg-white/[0.04] p-5 text-sm leading-6 text-white/65">Мы готовим праздничные активности заранее. Страница события, календарь, задания и магазин станут доступны после официального старта. Администратор может включить приватный тестовый режим.</section> : <>
           <section className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-cyan-100/15 bg-white/[0.05] p-5">
             <div><p className="text-xs uppercase tracking-widest text-cyan-200/65">Твой баланс</p><p className="mt-1 text-3xl font-black tabular-nums">{balance} <span className="text-lg text-cyan-200">SC</span></p></div>
             <div className="text-right text-xs text-white/45">{user ? `Аккаунт: @${user.user_metadata?.username ?? user.email ?? "пользователь"}` : "Войди в аккаунт, чтобы получать SnowCoins"}</div>
