@@ -78,7 +78,7 @@ export default function WinterFestAdminPage() {
   };
 
   return (
-    <main data-theme={store.settings.theme} className="winter-admin-page min-h-dvh overflow-y-auto bg-[#080d17] px-4 py-7 text-white sm:px-6">
+    <main data-theme={store.settings.theme} className="winter-admin-page h-dvh max-h-dvh min-h-0 overflow-y-auto overscroll-y-contain touch-pan-y bg-[#080d17] px-4 py-7 text-white sm:px-6">
       <div className="mx-auto max-w-5xl">
         <div className="flex justify-between gap-3"><Link href="/winter-fest" className="rounded-full border border-white/15 px-4 py-2 text-sm">← Winter Fest</Link><Link href="/" className="text-sm text-cyan-200 underline">На главную</Link></div>
         <header className="mt-7"><p className="text-xs font-bold uppercase tracking-[0.25em] text-cyan-200/60">Winter Fest 2027</p><h1 className="mt-2 text-3xl font-black">Управление событием</h1><p className="mt-2 text-sm text-white/45">Доступ только для аккаунтов с серверной ролью app_metadata.role = admin.</p></header>
