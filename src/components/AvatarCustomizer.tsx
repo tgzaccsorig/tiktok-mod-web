@@ -92,7 +92,7 @@ export default function AvatarCustomizer({ user, profile, onProfileChange }: { u
       setNotice(item.name + " установлено!");
     } catch (e) {
       const message = e instanceof Error ? e.message : "";
-      setFailure(message.includes("event_not_started") ? "Украшения можно менять после официального старта Winter Fest." : "Не удалось установить предмет. Проверь доступ к событию.");
+      setFailure(message.includes("event_not_started") ? "Событие ещё не началось. Для проверки администратор может включить тестовый режим." : "Не удалось установить предмет. Проверь доступ к событию.");
     } finally { setBusy(false); }
   };
 
@@ -106,7 +106,7 @@ export default function AvatarCustomizer({ user, profile, onProfileChange }: { u
       setNotice("Украшение снято.");
     } catch (e) {
       const message = e instanceof Error ? e.message : "";
-      setFailure(message.includes("event_not_started") ? "Снимать украшения можно после официального старта Winter Fest." : "Не удалось снять предмет.");
+      setFailure(message.includes("event_not_started") ? "Событие ещё не началось. Для проверки администратор может включить тестовый режим." : "Не удалось снять предмет.");
     } finally { setBusy(false); }
   };
 
