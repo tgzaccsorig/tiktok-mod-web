@@ -111,6 +111,7 @@ export default function WinterFestPage() {
       setEntries((publicResults[4].data ?? []) as unknown as Entry[]);
       if (!currentUser) {
         setBalance(0); setClaims([]); setOwned([]); setEquipped({}); setProgress([]); setLedger([]);
+        setClicker({level:1,clicks_total:0,earned_total:0,click_power:1,next_upgrade_cost:100});
         return;
       }
       const [wallet, userClaims, inventory, worn, questProgress, history, clickerState] = await Promise.all([
