@@ -22,14 +22,17 @@ export function clampIndex(i: number, len: number): number {
 }
 
 /** Сколько роликов вперёд предзагружаем (кроме текущего). */
-export const PRELOAD_AHEAD = 0;
+export const PRELOAD_AHEAD = 1;
 
-/** Индексы слайдов с настоящим плеером: только текущий ролик. */
+/** Индексы слайдов с настоящим плеером: текущий и один следующий, чтобы прогреть его заранее. */
 export function playerIndexes(index: number, len: number): number[] {
-  return index >= 0 && index < len ? [index] : [];
+  if (index < 0 || index >= len) return [];
+  const out: number[] = [];
+  for (let i = index; i <= Math.min(index + PRELOAD_AHEAD, len - 1); i++) out.push(i);
+  return out;
 }
 
-/** Соседние слайды остаются лёгкими постерами, без дополнительных iframe. */
+/** Соседние слайды остаются лёгкими постерами, кроме одного заранее прогреваемого плеера. */
 export function visibleIndexes(index: number, len: number): number[] {
   const out: number[] = [];
   for (let i = index - 1; i <= index + 1; i++) if (i >= 0 && i < len) out.push(i);
