@@ -362,8 +362,8 @@ export default function AccountPanel({ open, onClose, onUserChange }: Props) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/75 sm:items-center" onClick={onClose}>
-      <section className="account-panel touch-pan-y min-h-0 max-h-[92dvh] w-full max-w-xl overflow-y-auto overscroll-y-contain rounded-t-2xl border border-white/10 bg-neutral-950 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[70] flex items-end justify-center overflow-y-auto overscroll-y-contain py-3 bg-black/75 sm:items-center" onClick={onClose}>
+      <section className="account-panel touch-pan-y min-h-0 max-h-[92dvh] w-full max-w-xl flex-none overflow-y-scroll overscroll-y-contain rounded-t-2xl border border-white/10 bg-neutral-950 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
         <header className="mb-4 flex items-center justify-between">
           <div><p className="text-xs uppercase tracking-widest text-cyan-300">TikTok Mod Web</p><h2 className="text-xl font-bold">Аккаунт и сообщество</h2></div>
           <button onClick={onClose} className={buttonClass}>Закрыть</button>
@@ -389,6 +389,7 @@ export default function AccountPanel({ open, onClose, onUserChange }: Props) {
                 <div className="rounded-xl bg-white/5 p-3">
                   <div className="flex items-center justify-between gap-3"><div className="min-w-0"><p className="truncate font-semibold">{profile?.display_name || user.email}</p><p className="text-sm text-neutral-400">@{profile?.username || "профиль ещё создаётся"}</p></div><button className={buttonClass} onClick={signOut}>Выйти</button></div>
                   <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs"><Stat label="Подписчики" value={counts.followers}/><Stat label="Подписки" value={counts.following}/><Stat label="Лайки" value={counts.likes}/></div>
+                  {user.app_metadata?.role === "admin" && <a href="/winter-fest/admin" className="mt-3 flex w-full items-center justify-center rounded-lg border border-amber-200/25 bg-amber-200/10 px-3 py-3 text-sm font-bold text-amber-100">⚙ Открыть админ-панель Winter Fest</a>}
                 </div>
                 <div className="space-y-2"><h3 className="font-semibold">Мой профиль</h3><input className={inputClass} value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Уникальный никнейм"/><input className={inputClass} value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Имя"/><textarea className={inputClass} rows={3} maxLength={160} value={bio} onChange={(e) => setBio(e.target.value)} placeholder="О себе (до 160 символов)"/><button className="w-full rounded-lg bg-cyan-400 py-2 font-semibold text-black disabled:opacity-40" disabled={busy || !username.trim()} onClick={saveProfile}>Сохранить профиль</button></div>
                 <div className="space-y-2 border-t border-white/10 pt-3">
