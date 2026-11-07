@@ -972,8 +972,8 @@ export default function Feed() {
             <button aria-label="Профиль и аккаунт" onClick={() => setAccountOpen(true)} className="feed-icon-button rounded-full px-2 py-1 text-lg">
               {accountUser ? "👤" : "♙"}
             </button>
-            <a href="/updates" aria-label="Журнал обновлений" title="Журнал обновлений" className="feed-icon-button rounded-full p-2 text-lg">
-              ↻
+            <a href="/updates" aria-label="Журнал обновлений" title="Журнал обновлений" className="feed-icon-button rounded-full px-3 py-2 text-xs font-semibold whitespace-nowrap">
+              ↻ Обновления
             </a>
             <button aria-label="Обновить ленту" onClick={refresh} className="feed-icon-button rounded-full p-2">
               <RefreshIcon />
