@@ -157,3 +157,47 @@ grant execute on function public.site_admin_update_controls(text,boolean,boolean
 grant execute on function public.site_admin_delete_comment(uuid) to authenticated;
 grant execute on function public.site_admin_delete_user_video(uuid) to authenticated;
 grant execute on function public.site_admin_audit() to authenticated;
+
+-- Award the level-20 trophy on state reads as a recovery path and make the
+-- upgrade ledger reference idempotent if a previous request was retried.
+create or replace function private.winter_clicker_state()
+returns jsonb language plpgsql security definer set search_path = ''
+as $$
+declare v_user uuid := auth.uid(); v_stats public.winter_clicker_stats%rowtype; v_today date := private.winter_event_today();
+begin
+  if v_user is null then raise exception 'authentication_required'; end if;
+  if v_today < date '2026-12-20' then raise exception 'event_not_started'; end if;
+  insert into public.winter_clicker_stats(user_id) values(v_user) on conflict(user_id) do nothing;
+  select * into v_stats from public.winter_clicker_stats where user_id=v_user;
+  if v_stats.level >= 20 then
+    insert into public.winter_inventory(user_id,item_slug) values(v_user,'snow-legend') on conflict(user_id,item_slug) do nothing;
+  end if;
+  return jsonb_build_object('level',v_stats.level,'clicks_total',v_stats.clicks_total,'earned_total',v_stats.earned_total,'click_power',v_stats.level,'next_upgrade_cost',case when v_stats.level >= 20 then null else 100 * v_stats.level * v_stats.level end,'trophy_unlocked',v_stats.level >= 20);
+end;
+$$;
+
+create or replace function private.winter_clicker_upgrade()
+returns jsonb language plpgsql security definer set search_path = ''
+as $$
+declare
+  v_user uuid := auth.uid(); v_stats public.winter_clicker_stats%rowtype;
+  v_cost integer; v_balance integer; v_trophy boolean := false;
+begin
+  if v_user is null then raise exception 'authentication_required'; end if;
+  if private.winter_event_today() < date '2026-12-20' then raise exception 'event_not_started'; end if;
+  insert into public.winter_wallets(user_id,balance) values(v_user,0) on conflict(user_id) do nothing;
+  insert into public.winter_clicker_stats(user_id) values(v_user) on conflict(user_id) do nothing;
+  select * into v_stats from public.winter_clicker_stats where user_id=v_user for update;
+  if v_stats.level >= 20 then raise exception 'clicker_max_level'; end if;
+  v_cost := 100 * v_stats.level * v_stats.level;
+  update public.winter_wallets set balance=balance-v_cost,updated_at=now() where user_id=v_user and balance>=v_cost returning balance into v_balance;
+  if not found then raise exception 'insufficient_balance'; end if;
+  update public.winter_clicker_stats set level=level+1,updated_at=now() where user_id=v_user returning * into v_stats;
+  insert into public.winter_coin_ledger(user_id,amount,reason,reference) values(v_user,-v_cost,'clicker_upgrade','clicker-level:'||v_stats.level::text) on conflict(user_id,reference) do nothing;
+  if v_stats.level = 20 then
+    insert into public.winter_inventory(user_id,item_slug) values(v_user,'snow-legend') on conflict(user_id,item_slug) do nothing;
+    v_trophy := true;
+  end if;
+  return jsonb_build_object('level',v_stats.level,'balance',v_balance,'click_power',v_stats.level,'clicks_total',v_stats.clicks_total,'earned_total',v_stats.earned_total,'next_upgrade_cost',case when v_stats.level >= 20 then null else 100 * v_stats.level * v_stats.level end,'trophy_unlocked',v_trophy);
+end;
+$$;
