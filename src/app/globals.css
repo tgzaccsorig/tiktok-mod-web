@@ -81,8 +81,19 @@ body {
 .mobile-bottom-nav .mobile-nav-link > span { font-size:21px; line-height:22px; }
 .mobile-bottom-nav .mobile-nav-link > small { font-size:10px; line-height:13px; white-space:nowrap; }
 .account-panel, .video-sheet { -webkit-overflow-scrolling:touch; overscroll-behavior:contain; }
-.account-panel input, .account-panel textarea, .video-sheet textarea, .comments-panel textarea { font-size:16px; }
-.account-panel button, .video-sheet button, .comments-panel button { min-height:44px; touch-action:manipulation; }
+.account-panel {
+  height: min(92dvh, 760px);
+  max-height: 92dvh;
+  min-height: 0;
+  flex: 0 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  touch-action: pan-y;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.account-panel::-webkit-scrollbar { display:none; }
 .comments-panel { padding-bottom:max(0.75rem,env(safe-area-inset-bottom)); }
 @media (max-width: 639px) {
   .feed-header { min-height:0; flex-wrap:wrap; row-gap:5px; padding-top:2px; padding-bottom:3px; }
@@ -111,17 +122,3 @@ body {
 }
 
 @media (min-width: 640px) { .mobile-bottom-nav { display:none; } }
-
-/* Make the profile a real touch-scroll viewport on phones (not a tiny scrollbar target). */
-@media (max-width: 639px) {
-  .account-panel {
-    height: min(92dvh, 760px);
-    max-height: 92dvh;
-    min-height: 0;
-    overflow-y: auto;
-    overflow-x: hidden;
-    touch-action: pan-y;
-    overscroll-behavior-y: contain;
-    -webkit-overflow-scrolling: touch;
-  }
-}
