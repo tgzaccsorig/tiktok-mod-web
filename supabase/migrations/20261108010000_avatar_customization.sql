@@ -25,7 +25,7 @@ declare
 begin
   if v_user is null then raise exception 'authentication_required'; end if;
   if p_slot not in ('frame','background','badge','title') then raise exception 'invalid_slot'; end if;
-  if timezone('Europe/Helsinki', now())::date < date '2026-12-20' then raise exception 'event_not_started'; end if;
+  if private.winter_event_today() < date '2026-12-20' then raise exception 'event_not_started'; end if;
   delete from public.winter_equipped_items where user_id = v_user and slot = p_slot;
   return jsonb_build_object('slot', p_slot, 'equipped', false);
 end;
