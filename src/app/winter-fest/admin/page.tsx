@@ -48,7 +48,7 @@ export default function WinterFestAdminPage() {
 
   useEffect(()=>{void load();},[load]);
 
-  const save = async (action:()=>Promise<{error:any}>,success:string) => {
+  const save = async (action:()=>PromiseLike<{error:any}>,success:string) => {
     setSaving(true);setError("");setMessage("");
     try { const result=await action(); if(result.error) throw result.error; setMessage(success); await load(); }
     catch(e) { setError(e instanceof Error ? e.message : "Не удалось сохранить."); }
