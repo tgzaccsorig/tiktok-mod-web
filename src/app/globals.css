@@ -85,8 +85,8 @@ body {
   height: min(92dvh, 760px);
   max-height: 92dvh;
   min-height: 0;
-  flex: 0 1 auto;
-  overflow-y: auto;
+  flex: 0 0 auto;
+  overflow-y: scroll;
   overflow-x: hidden;
   touch-action: pan-y;
   overscroll-behavior-y: contain;
@@ -94,6 +94,7 @@ body {
   scrollbar-width: none;
 }
 .account-panel::-webkit-scrollbar { display:none; }
+.public-user-page { height:100dvh; overflow-y:scroll; overflow-x:hidden; overscroll-behavior-y:contain; -webkit-overflow-scrolling:touch; touch-action:pan-y; }
 .comments-panel { padding-bottom:max(0.75rem,env(safe-area-inset-bottom)); }
 @media (max-width: 639px) {
   .feed-header { min-height:0; flex-wrap:wrap; row-gap:5px; padding-top:2px; padding-bottom:3px; }
