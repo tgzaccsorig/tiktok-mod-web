@@ -201,3 +201,83 @@ begin
   return jsonb_build_object('level',v_stats.level,'balance',v_balance,'click_power',v_stats.level,'clicks_total',v_stats.clicks_total,'earned_total',v_stats.earned_total,'next_upgrade_cost',case when v_stats.level >= 20 then null else 100 * v_stats.level * v_stats.level end,'trophy_unlocked',v_trophy);
 end;
 $$;
+
+-- Keep privileged routines in the non-exposed private schema. Public RPCs are
+-- SECURITY INVOKER wrappers and the private routines validate app_metadata.role.
+create or replace function private.site_admin_stats()
+returns jsonb language plpgsql security definer set search_path = ''
+as $$
+declare v_user uuid := private.site_admin_require();
+begin
+  return jsonb_build_object('users',(select count(*) from public.profiles),'videos',(select count(*) from public.user_videos),'comments',(select count(*) from public.comments),'likes',(select count(*) from public.likes),'follows',(select count(*) from public.follows),'winter_wallets',(select count(*) from public.winter_wallets));
+end;
+$$;
+create or replace function private.site_admin_update_controls(p_announcement text,p_announcement_active boolean,p_maintenance_mode boolean,p_maintenance_message text)
+returns jsonb language plpgsql security definer set search_path = ''
+as $$
+declare v_user uuid := private.site_admin_require();
+begin
+  if char_length(coalesce(p_announcement,'')) > 240 then raise exception 'announcement_too_long'; end if;
+  if char_length(coalesce(p_maintenance_message,'')) > 240 then raise exception 'message_too_long'; end if;
+  update public.site_control_settings set announcement=coalesce(p_announcement,''),announcement_active=coalesce(p_announcement_active,false),maintenance_mode=coalesce(p_maintenance_mode,false),maintenance_message=coalesce(p_maintenance_message,''),updated_by=v_user,updated_at=now() where id=true;
+  insert into public.site_admin_audit_log(actor_id,action,target_type,target_id,details) values(v_user,'update_site_controls','site','global',jsonb_build_object('announcement_active',p_announcement_active,'maintenance_mode',p_maintenance_mode));
+  return (select to_jsonb(s) from public.site_control_settings s where id=true);
+end;
+$$;
+create or replace function private.site_admin_delete_comment(p_comment_id uuid)
+returns boolean language plpgsql security definer set search_path = ''
+as $$
+declare v_user uuid := private.site_admin_require(); v_content text;
+begin
+  select left(content,120) into v_content from public.comments where id=p_comment_id;
+  if not found then return false; end if;
+  insert into public.site_admin_audit_log(actor_id,action,target_type,target_id,details) values(v_user,'delete_comment','comment',p_comment_id::text,jsonb_build_object('preview',v_content));
+  delete from public.comments where id=p_comment_id;
+  return true;
+end;
+$$;
+create or replace function private.site_admin_delete_user_video(p_video_id uuid)
+returns boolean language plpgsql security definer set search_path = ''
+as $$
+declare v_user uuid := private.site_admin_require(); v_title text; v_owner uuid;
+begin
+  select title,user_id into v_title,v_owner from public.user_videos where id=p_video_id;
+  if not found then return false; end if;
+  insert into public.site_admin_audit_log(actor_id,action,target_type,target_id,details) values(v_user,'delete_user_video','video',p_video_id::text,jsonb_build_object('title',left(coalesce(v_title,''),120),'owner_id',v_owner));
+  delete from public.user_videos where id=p_video_id;
+  return true;
+end;
+$$;
+create or replace function private.site_admin_audit()
+returns jsonb language plpgsql security definer set search_path = ''
+as $$
+declare v_user uuid := private.site_admin_require();
+begin
+  return coalesce((select jsonb_agg(to_jsonb(a) order by a.created_at desc) from (select id,action,target_type,target_id,details,created_at from public.site_admin_audit_log order by created_at desc limit 40) a),'[]'::jsonb);
+end;
+$$;
+create or replace function public.site_admin_stats() returns jsonb language sql security invoker set search_path = '' as $$ select private.site_admin_stats(); $$;
+create or replace function public.site_admin_update_controls(p_announcement text,p_announcement_active boolean,p_maintenance_mode boolean,p_maintenance_message text) returns jsonb language sql security invoker set search_path = '' as $$ select private.site_admin_update_controls(p_announcement,p_announcement_active,p_maintenance_mode,p_maintenance_message); $$;
+create or replace function public.site_admin_delete_comment(p_comment_id uuid) returns boolean language sql security invoker set search_path = '' as $$ select private.site_admin_delete_comment(p_comment_id); $$;
+create or replace function public.site_admin_delete_user_video(p_video_id uuid) returns boolean language sql security invoker set search_path = '' as $$ select private.site_admin_delete_user_video(p_video_id); $$;
+create or replace function public.site_admin_audit() returns jsonb language sql security invoker set search_path = '' as $$ select private.site_admin_audit(); $$;
+revoke all on function private.site_admin_stats() from public,anon;
+revoke all on function private.site_admin_update_controls(text,boolean,boolean,text) from public,anon;
+revoke all on function private.site_admin_delete_comment(uuid) from public,anon;
+revoke all on function private.site_admin_delete_user_video(uuid) from public,anon;
+revoke all on function private.site_admin_audit() from public,anon;
+grant execute on function private.site_admin_stats() to authenticated;
+grant execute on function private.site_admin_update_controls(text,boolean,boolean,text) to authenticated;
+grant execute on function private.site_admin_delete_comment(uuid) to authenticated;
+grant execute on function private.site_admin_delete_user_video(uuid) to authenticated;
+grant execute on function private.site_admin_audit() to authenticated;
+revoke all on function public.site_admin_stats() from public,anon;
+revoke all on function public.site_admin_update_controls(text,boolean,boolean,text) from public,anon;
+revoke all on function public.site_admin_delete_comment(uuid) from public,anon;
+revoke all on function public.site_admin_delete_user_video(uuid) from public,anon;
+revoke all on function public.site_admin_audit() from public,anon;
+grant execute on function public.site_admin_stats() to authenticated;
+grant execute on function public.site_admin_update_controls(text,boolean,boolean,text) to authenticated;
+grant execute on function public.site_admin_delete_comment(uuid) to authenticated;
+grant execute on function public.site_admin_delete_user_video(uuid) to authenticated;
+grant execute on function public.site_admin_audit() to authenticated;
