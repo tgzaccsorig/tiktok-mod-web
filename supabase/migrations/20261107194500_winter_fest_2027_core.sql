@@ -157,7 +157,6 @@ create policy "Winter admins manage competitions" on public.winter_competitions 
 grant select on public.winter_advent_rewards, public.winter_shop_items, public.winter_quests, public.winter_competitions, public.winter_competition_entries, public.winter_equipped_items to anon, authenticated;
 grant select on public.winter_wallets, public.winter_coin_ledger, public.winter_advent_claims, public.winter_inventory, public.winter_quest_progress to authenticated;
 grant insert on public.winter_competition_entries to authenticated;
-grant insert, update, delete on public.winter_shop_items, public.winter_quests, public.winter_competitions to authenticated;
 
 insert into public.winter_advent_rewards(day, reward_coins, reward_title, icon)
 select date '2026-12-01' + n, 10, 'SnowCoins', '❄️'
@@ -337,8 +336,8 @@ returns jsonb language sql security invoker set search_path = '' as $$ select pr
 create or replace function public.winter_claim_quest(p_slug text)
 returns jsonb language sql security invoker set search_path = '' as $$ select private.winter_claim_quest(p_slug); $$;
 
-revoke all on function private.winter_claim_advent_day(date), private.winter_purchase_item(text), private.winter_equip_item(text), private.winter_claim_quest(text), private.winter_record_social_action() from public, anon;
-grant execute on function private.winter_claim_advent_day(date), private.winter_purchase_item(text), private.winter_equip_item(text), private.winter_claim_quest(text), private.winter_record_social_action() to authenticated;
+revoke all on function private.winter_claim_advent_day(date), private.winter_purchase_item(text), private.winter_equip_item(text), private.winter_claim_quest(text), private.winter_record_social_action() from public, anon, authenticated;
+grant execute on function private.winter_claim_advent_day(date), private.winter_purchase_item(text), private.winter_equip_item(text), private.winter_claim_quest(text) to authenticated;
 revoke all on function public.winter_claim_advent_day(date), public.winter_purchase_item(text), public.winter_equip_item(text), public.winter_claim_quest(text) from public, anon;
 grant execute on function public.winter_claim_advent_day(date), public.winter_purchase_item(text), public.winter_equip_item(text), public.winter_claim_quest(text) to authenticated;
 
