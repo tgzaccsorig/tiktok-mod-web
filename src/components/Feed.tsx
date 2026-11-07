@@ -416,31 +416,35 @@ export default function Feed() {
       post(key, soundRef.current ? "unMute" : "mute");
       post(key, "play");
       ensureSound(key);
+      const skipFailedVideo = () => {
+        const id = queueRef.current.find((s) => s.key === key)?.item.id;
+        if (!id) return;
+        const q = queueRef.current;
+        const cur = indexRef.current;
+        const kept = q.filter((slide) => slide.item.id !== id);
+        const nextIndex = clampIndex(q.slice(0, cur).filter((slide) => slide.item.id !== id).length, kept.length);
+        queueRef.current = kept;
+        indexRef.current = nextIndex;
+        setRemoved((items) => (items.includes(id) ? items : [...items, id]));
+        setQueue(kept);
+        setIndex(nextIndex);
+        applyTransform(0, false);
+        showToast("Ролик не загрузился — пропущен");
+      };
       clearTimeout(fallbackRef.current);
       fallbackRef.current = setTimeout(() => {
         if (confirmedRef.current || currentKeyRef.current !== key) return;
-        // Не заставляем пользователя вручную перебирать зависшие/недоступные ролики.
-        // Делаем одну повторную загрузку, затем автоматически убираем ролик из очереди.
+        // Одна повторная загрузка; если плеер снова не отвечает, автоматически пропускаем ролик.
         const n = reloadCountRef.current[key] ?? 0;
         if (n >= 1) {
-          const id = queueRef.current.find((s) => s.key === key)?.item.id;
-          if (id) {
-            const q = queueRef.current;
-            const cur = indexRef.current;
-            const kept = q.filter((slide) => slide.item.id !== id);
-            const nextIndex = clampIndex(q.slice(0, cur).filter((slide) => slide.item.id !== id).length, kept.length);
-            queueRef.current = kept;
-            indexRef.current = nextIndex;
-            setRemoved((items) => (items.includes(id) ? items : [...items, id]));
-            setQueue(kept);
-            setIndex(nextIndex);
-            applyTransform(0, false);
-            showToast("Ролик не загрузился — пропущен");
-          }
+          skipFailedVideo();
           return;
         }
         reloadCountRef.current[key] = n + 1;
         reloadCurrent(!soundRef.current);
+        fallbackRef.current = setTimeout(() => {
+          if (!confirmedRef.current && currentKeyRef.current === key) skipFailedVideo();
+        }, 6000);
       }, 7000);
     },
     [post, reloadCurrent, ensureSound, applyTransform, showToast],
