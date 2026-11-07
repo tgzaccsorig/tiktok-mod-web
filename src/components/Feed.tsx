@@ -67,6 +67,8 @@ export default function Feed() {
   const [sheet, setSheet] = useState(false);
   const [nonce, setNonce] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
+  const [siteNotice, setSiteNotice] = useState<{announcement:string;announcement_active:boolean;maintenance_mode:boolean;maintenance_message:string}|null>(null);
+  const [siteNoticeDismissed, setSiteNoticeDismissed] = useState(false);
   const [isFs, setIsFs] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
@@ -339,6 +341,16 @@ export default function Feed() {
     })();
     return () => { cancelled = true; };
   }, [mode, accountUser?.id, accountOpen, showToast]);
+
+  useEffect(() => {
+    const supabase = getSupabase();
+    if (!supabase) return;
+    let active = true;
+    void supabase.from("site_control_settings").select("announcement,announcement_active,maintenance_mode,maintenance_message").eq("id",true).maybeSingle().then(({data}) => {
+      if (active && data) setSiteNotice(data);
+    });
+    return () => { active = false; };
+  }, []);
 
   const bootstrapped = ready && catalogState !== "loading" && customLoaded;
 
@@ -925,6 +937,7 @@ export default function Feed() {
 
   return (
     <div ref={rootRef} data-theme={store.settings.theme ?? "dark"} className="relative h-dvh w-full select-none overflow-hidden bg-black" data-testid="feed">
+      {siteNotice && !siteNoticeDismissed && (siteNotice.announcement_active || siteNotice.maintenance_mode) && <div className="pointer-events-auto absolute left-3 right-3 top-3 z-[95] mx-auto flex max-w-xl items-start gap-3 rounded-2xl border border-cyan-200/25 bg-slate-950/95 p-3 text-white shadow-2xl backdrop-blur-xl"><span className="text-xl">{siteNotice.maintenance_mode?"🛠️":"📢"}</span><div className="min-w-0 flex-1"><b className="block text-xs text-cyan-100">{siteNotice.maintenance_mode?"Технические работы":"Объявление"}</b><p className="mt-1 text-xs leading-5 text-white/80">{siteNotice.maintenance_mode?siteNotice.maintenance_message:siteNotice.announcement}</p></div><button aria-label="Закрыть объявление" onClick={()=>setSiteNoticeDismissed(true)} className="rounded-lg px-2 py-1 text-white/60 hover:bg-white/10">✕</button></div>}
       {/* лента */}
       <div ref={trackRef} className="absolute inset-0 will-change-transform" data-testid="track">
         {visible.map((i) => {
