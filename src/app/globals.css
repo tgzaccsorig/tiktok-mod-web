@@ -111,3 +111,17 @@ body {
 }
 
 @media (min-width: 640px) { .mobile-bottom-nav { display:none; } }
+
+/* Make the profile a real touch-scroll viewport on phones (not a tiny scrollbar target). */
+@media (max-width: 639px) {
+  .account-panel {
+    height: min(92dvh, 760px);
+    max-height: 92dvh;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    touch-action: pan-y;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+}
