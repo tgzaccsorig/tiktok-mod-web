@@ -70,6 +70,7 @@ export default function Feed() {
   const [isFs, setIsFs] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [accountUser, setAccountUser] = useState<AccountIdentity | null>(null);
 
   const mode = store.category;
@@ -880,7 +881,7 @@ export default function Feed() {
   const soundOn = unlocked && store.settings.sound;
 
   return (
-    <div ref={rootRef} className="relative h-dvh w-full select-none overflow-hidden bg-black" data-testid="feed">
+    <div ref={rootRef} data-theme={store.settings.theme ?? "dark"} className="relative h-dvh w-full select-none overflow-hidden bg-black" data-testid="feed">
       {/* лента */}
       <div ref={trackRef} className="absolute inset-0 will-change-transform" data-testid="track">
         {visible.map((i) => {
@@ -967,6 +968,7 @@ export default function Feed() {
         <div className="feed-header flex items-center justify-between px-3">
           <span className="logo-glitch feed-logo text-base font-extrabold tracking-tight">TikTok Mod Web</span>
           <div className="pointer-events-auto flex items-center gap-1">
+            <button aria-label="Настройки" title="Настройки" onClick={() => setSettingsOpen(true)} className="feed-icon-button rounded-full p-2 text-lg">⚙</button>
             <button aria-label="Профиль и аккаунт" onClick={() => setAccountOpen(true)} className="feed-icon-button rounded-full px-2 py-1 text-lg">
               {accountUser ? "👤" : "♙"}
             </button>
@@ -1046,6 +1048,9 @@ export default function Feed() {
         <button type="button" aria-label="Профиль" onClick={() => setAccountOpen(true)}>
           <span aria-hidden="true">♙</span><small>Профиль</small>
         </button>
+        <button type="button" aria-label="Настройки" onClick={() => setSettingsOpen(true)}>
+          <span aria-hidden="true">⚙</span><small>Настройки</small>
+        </button>
       </nav>
 
       {/* информация о ролике */}
@@ -1123,6 +1128,29 @@ export default function Feed() {
         </div>
       )}
 
+      {settingsOpen && (
+        <div className="settings-backdrop fixed inset-0 z-[80] flex items-end justify-center bg-black/75 p-0 sm:items-center sm:p-4" onClick={() => setSettingsOpen(false)}>
+          <section className="settings-panel max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-white/10 bg-neutral-950 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-white shadow-2xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
+            <header className="mb-5 flex items-center justify-between gap-3">
+              <div><p className="text-xs font-semibold uppercase tracking-widest text-cyan-300">TikTok Mod Web</p><h2 className="text-2xl font-bold">Настройки</h2></div>
+              <button onClick={() => setSettingsOpen(false)} className="rounded-full border border-white/15 px-3 py-2 text-sm">Закрыть</button>
+            </header>
+            <div className="space-y-5">
+              <section><h3 className="mb-2 font-semibold">Оформление</h3><div className="grid grid-cols-2 gap-2">
+                <button onClick={() => update((s) => ({ ...s, settings: { ...s.settings, theme: "dark" } }))} className={`rounded-xl border px-4 py-3 text-sm ${store.settings.theme !== "light" ? "border-cyan-300 bg-cyan-300/15" : "border-white/15 bg-white/5"}`}>🌙 Тёмная тема</button>
+                <button onClick={() => update((s) => ({ ...s, settings: { ...s.settings, theme: "light" } }))} className={`rounded-xl border px-4 py-3 text-sm ${store.settings.theme === "light" ? "border-cyan-500 bg-cyan-500/15" : "border-white/15 bg-white/5"}`}>☀️ Светлая тема</button>
+              </div></section>
+              <section className="space-y-3 border-t border-white/10 pt-4"><h3 className="font-semibold">Воспроизведение</h3>
+                <label className="flex items-center justify-between gap-3 text-sm">Качество видео <span className="rounded-lg bg-white/10 px-3 py-2 text-xs">Авто</span></label>
+                <p className="text-xs opacity-60">Встроенный плеер TikTok сам выбирает качество. Ручное переключение качества для таких роликов сайт пока не поддерживает.</p>
+                <label className="flex items-center justify-between gap-3 text-sm">Звук включён<input type="checkbox" checked={store.settings.sound} onChange={(e) => update((s) => ({ ...s, settings: { ...s.settings, sound: e.target.checked } }))} className="h-5 w-5 accent-[#fe2c55]" /></label>
+                <label className="flex items-center justify-between gap-3 text-sm">Автопереход после окончания ролика<input type="checkbox" checked={store.settings.autoNext} onChange={(e) => update((s) => ({ ...s, settings: { ...s.settings, autoNext: e.target.checked } }))} className="h-5 w-5 accent-[#fe2c55]" /></label>
+              </section>
+              <section className="space-y-2 border-t border-white/10 pt-4"><h3 className="font-semibold">TikTok Mod Web</h3><a href="/updates" className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm hover:bg-white/10"><span>📋 Журнал обновлений</span><span>Открыть →</span></a><button onClick={() => { setSettingsOpen(false); setAccountOpen(true); }} className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm">👤 Аккаунт и профиль <span>Открыть →</span></button></section>
+            </div>
+          </section>
+        </div>
+      )}
       <CommentsPanel
         open={commentsOpen}
         video={current ?? null}
