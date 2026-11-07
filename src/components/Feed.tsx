@@ -960,13 +960,13 @@ export default function Feed() {
             <button aria-label="Обновить ленту" onClick={refresh} className="feed-icon-button rounded-full p-2">
               <RefreshIcon />
             </button>
-            <button aria-label="Звук" onClick={onSoundButton} className="rounded-full p-2 hover:bg-white/10">
+            <button aria-label="Звук" onClick={onSoundButton} className="feed-icon-button rounded-full p-2">
               <VolumeIcon filled={soundOn} />
             </button>
-            <button aria-label="Во весь экран" onClick={toggleFullscreen} className="rounded-full p-2 hover:bg-white/10">
+            <button aria-label="Во весь экран" onClick={toggleFullscreen} className="feed-icon-button rounded-full p-2">
               <FullscreenIcon className={isFs ? "text-brand-cyan" : ""} />
             </button>
-            <button aria-label="Добавить видео" onClick={() => setSheet(true)} className="rounded-full p-2 hover:bg-white/10">
+            <button aria-label="Добавить видео" onClick={() => setSheet(true)} className="feed-icon-button rounded-full p-2">
               <PlusIcon />
             </button>
           </div>
@@ -989,33 +989,49 @@ export default function Feed() {
 
       {/* правая панель действий */}
       {current && (
-        <div className="feed-action-rail absolute bottom-[max(7rem,calc(env(safe-area-inset-bottom)+6rem))] right-2 z-30 flex flex-col items-center gap-5">
+        <div className="feed-action-rail absolute bottom-[calc(env(safe-area-inset-bottom)+5rem)] right-2 z-30 flex flex-col items-center gap-5 sm:bottom-[max(7rem,calc(env(safe-area-inset-bottom)+6rem))]">
           <button aria-label="Лайк" data-testid="like" onClick={() => toggleIn("likes")} className="feed-action flex flex-col items-center">
             <HeartIcon filled={liked} className={`h-9 w-9 drop-shadow ${liked ? "pop text-brand-red" : ""}`} />
             <span className="text-xs">{liked ? "Нравится" : "Лайк"}</span>
           </button>
-          <button aria-label="В избранное" data-testid="fav" onClick={() => toggleIn("favs")} className="flex flex-col items-center">
+          <button aria-label="В избранное" data-testid="fav" onClick={() => toggleIn("favs")} className="feed-action flex flex-col items-center">
             <BookmarkIcon filled={faved} className={`h-9 w-9 drop-shadow ${faved ? "pop text-yellow-300" : ""}`} />
             <span className="text-xs">{faved ? "В избранном" : "Избранное"}</span>
           </button>
-          <button aria-label="Комментарии" onClick={() => setCommentsOpen(true)} className="flex flex-col items-center">
+          <button aria-label="Комментарии" onClick={() => setCommentsOpen(true)} className="feed-action flex flex-col items-center">
             <span className="text-3xl leading-9 drop-shadow">💬</span>
             <span className="text-xs">Комментарии</span>
           </button>
-          <button aria-label="Не интересно" onClick={markNotInterested} className="flex flex-col items-center">
+          <button aria-label="Не интересно" onClick={markNotInterested} className="feed-action flex flex-col items-center">
             <span className="text-3xl leading-9 drop-shadow">👎</span>
             <span className="text-xs">Не интересно</span>
           </button>
-          <button aria-label="Поделиться" onClick={share} className="flex flex-col items-center">
+          <button aria-label="Поделиться" onClick={share} className="feed-action flex flex-col items-center">
             <ShareIcon className="h-9 w-9 drop-shadow" />
             <span className="text-xs">Поделиться</span>
           </button>
         </div>
       )}
 
+      {/* мобильная навигация: основные разделы доступны одной рукой */}
+      <nav aria-label="Основная навигация" className="mobile-bottom-nav sm:hidden">
+        <button type="button" aria-label="Для тебя" aria-current={mode === "foryou" ? "page" : undefined} onClick={() => setMode("foryou")} className={mode === "foryou" ? "is-active" : ""}>
+          <span aria-hidden="true">⌂</span><small>Для тебя</small>
+        </button>
+        <button type="button" aria-label="Подписки" aria-current={mode === "subscriptions" ? "page" : undefined} onClick={() => setMode("subscriptions")} className={mode === "subscriptions" ? "is-active" : ""}>
+          <span aria-hidden="true">♧</span><small>Подписки</small>
+        </button>
+        <button type="button" aria-label="Добавить видео" onClick={() => setSheet(true)}>
+          <span aria-hidden="true">＋</span><small>Добавить</small>
+        </button>
+        <button type="button" aria-label="Профиль" onClick={() => setAccountOpen(true)}>
+          <span aria-hidden="true">♙</span><small>Профиль</small>
+        </button>
+      </nav>
+
       {/* информация о ролике */}
       {current && (
-        <div className="feed-caption pointer-events-none absolute inset-x-0 bottom-0 z-30 bg-gradient-to-t from-black/90 via-black/35 to-transparent px-3 pb-[max(1rem,env(safe-area-inset-bottom))] pt-16 pr-20">
+        <div className="feed-caption pointer-events-none absolute inset-x-0 bottom-0 z-30 bg-gradient-to-t from-black/90 via-black/35 to-transparent px-3 pb-[calc(env(safe-area-inset-bottom)+4.5rem)] pt-16 pr-20 sm:pb-[max(1rem,env(safe-area-inset-bottom))]">
           <a
             href={current.authorUrl || current.url}
             target="_blank"
