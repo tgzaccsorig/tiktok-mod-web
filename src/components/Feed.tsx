@@ -424,14 +424,26 @@ export default function Feed() {
         const n = reloadCountRef.current[key] ?? 0;
         if (n >= 1) {
           const id = queueRef.current.find((s) => s.key === key)?.item.id;
-          if (id) dropVideo(id, "Ролик не загрузился — пропущен");
+          if (id) {
+            const q = queueRef.current;
+            const cur = indexRef.current;
+            const kept = q.filter((slide) => slide.item.id !== id);
+            const nextIndex = clampIndex(q.slice(0, cur).filter((slide) => slide.item.id !== id).length, kept.length);
+            queueRef.current = kept;
+            indexRef.current = nextIndex;
+            setRemoved((items) => (items.includes(id) ? items : [...items, id]));
+            setQueue(kept);
+            setIndex(nextIndex);
+            applyTransform(0, false);
+            showToast("Ролик не загрузился — пропущен");
+          }
           return;
         }
         reloadCountRef.current[key] = n + 1;
         reloadCurrent(!soundRef.current);
       }, 7000);
     },
-    [post, reloadCurrent, ensureSound],
+    [post, reloadCurrent, ensureSound, applyTransform, showToast],
   );
 
   /* ---------- сборка очереди ---------- */
@@ -592,7 +604,8 @@ export default function Feed() {
             setNeedsTap(true);
             setPlayback("paused");
           } else {
-            setPlayback("error");
+            const id = queueRef.current.find((s) => s.key === key)?.item.id;
+            if (id) dropVideo(id);
           }
           break;
         }
