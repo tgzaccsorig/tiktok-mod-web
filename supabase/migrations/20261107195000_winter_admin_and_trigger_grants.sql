@@ -1,0 +1,1 @@
+grant insert, update, delete on public.winter_shop_items, public.winter_quests, public.winter_competitions to authenticated; grant execute on function private.winter_record_social_action() to authenticated;

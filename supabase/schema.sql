@@ -1,5 +1,6 @@
 -- TikTok Mod Web: run this file in Supabase SQL Editor.
 create extension if not exists pgcrypto;
+create extension if not exists pg_trgm;
 
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
@@ -53,33 +54,39 @@ alter table public.watch_history enable row level security;
 drop policy if exists "Profiles are publicly readable" on public.profiles;
 create policy "Profiles are publicly readable" on public.profiles for select using (true);
 drop policy if exists "Users create own profile" on public.profiles;
-create policy "Users create own profile" on public.profiles for insert with check (auth.uid() = id);
+create policy "Users create own profile" on public.profiles for insert to authenticated with check ((select auth.uid()) = id);
 drop policy if exists "Users update own profile" on public.profiles;
-create policy "Users update own profile" on public.profiles for update using (auth.uid() = id) with check (auth.uid() = id);
+create policy "Users update own profile" on public.profiles for update to authenticated using ((select auth.uid()) = id) with check ((select auth.uid()) = id);
 
 drop policy if exists "Follow relationships are publicly readable" on public.follows;
 create policy "Follow relationships are publicly readable" on public.follows for select using (true);
 drop policy if exists "Users follow as themselves" on public.follows;
-create policy "Users follow as themselves" on public.follows for insert with check (auth.uid() = follower_id);
+create policy "Users follow as themselves" on public.follows for insert to authenticated with check ((select auth.uid()) = follower_id);
 drop policy if exists "Users unfollow as themselves" on public.follows;
-create policy "Users unfollow as themselves" on public.follows for delete using (auth.uid() = follower_id);
+create policy "Users unfollow as themselves" on public.follows for delete to authenticated using ((select auth.uid()) = follower_id);
 
 drop policy if exists "Likes are publicly readable" on public.likes;
 create policy "Likes are publicly readable" on public.likes for select using (true);
 drop policy if exists "Users manage own likes" on public.likes;
-create policy "Users manage own likes" on public.likes for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "Users create own likes" on public.likes;
+create policy "Users create own likes" on public.likes for insert to authenticated with check ((select auth.uid()) = user_id);
+drop policy if exists "Users delete own likes" on public.likes;
+create policy "Users delete own likes" on public.likes for delete to authenticated using ((select auth.uid()) = user_id);
 
 drop policy if exists "Favorites are private to owner" on public.favorites;
-create policy "Favorites are private to owner" on public.favorites for select using (auth.uid() = user_id);
+create policy "Favorites are private to owner" on public.favorites for select to authenticated using ((select auth.uid()) = user_id);
 drop policy if exists "Users manage own favorites" on public.favorites;
-create policy "Users manage own favorites" on public.favorites for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "Users create own favorites" on public.favorites;
+create policy "Users create own favorites" on public.favorites for insert to authenticated with check ((select auth.uid()) = user_id);
+drop policy if exists "Users delete own favorites" on public.favorites;
+create policy "Users delete own favorites" on public.favorites for delete to authenticated using ((select auth.uid()) = user_id);
 
 drop policy if exists "History is private to owner" on public.watch_history;
-create policy "History is private to owner" on public.watch_history for select using (auth.uid() = user_id);
+create policy "History is private to owner" on public.watch_history for select to authenticated using ((select auth.uid()) = user_id);
 drop policy if exists "Users insert own history" on public.watch_history;
-create policy "Users insert own history" on public.watch_history for insert with check (auth.uid() = user_id);
+create policy "Users insert own history" on public.watch_history for insert to authenticated with check ((select auth.uid()) = user_id);
 drop policy if exists "Users delete own history" on public.watch_history;
-create policy "Users delete own history" on public.watch_history for delete using (auth.uid() = user_id);
+create policy "Users delete own history" on public.watch_history for delete to authenticated using ((select auth.uid()) = user_id);
 
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = public
@@ -98,3 +105,128 @@ $$;
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created after insert on auth.users
 for each row execute procedure public.handle_new_user();
+
+
+-- Video comments (TikTok Mod Web 2.0)
+create table if not exists public.comments (
+  id uuid primary key default gen_random_uuid(),
+  video_id text not null,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  content text not null check (char_length(content) between 1 and 1000),
+  created_at timestamptz not null default now()
+);
+create index if not exists comments_video_created_idx on public.comments(video_id, created_at desc);
+alter table public.comments enable row level security;
+drop policy if exists "Comments are publicly readable" on public.comments;
+create policy "Comments are publicly readable" on public.comments for select using (true);
+drop policy if exists "Users create own comments" on public.comments;
+create policy "Users create own comments" on public.comments for insert to authenticated with check ((select auth.uid()) = user_id);
+drop policy if exists "Users delete own comments" on public.comments;
+create policy "Users delete own comments" on public.comments for delete to authenticated using ((select auth.uid()) = user_id);
+create index if not exists comments_user_created_idx on public.comments(user_id, created_at desc);
+
+
+-- Notifications for follows, likes, and comments on user-published videos.
+create table if not exists public.notifications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  actor_id uuid not null references public.profiles(id) on delete cascade,
+  type text not null check (type in ('follow','like','comment')),
+  video_id text,
+  comment_id uuid references public.comments(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  read_at timestamptz,
+  check (
+    (type = 'follow' and video_id is null and comment_id is null)
+    or (type = 'like' and video_id is not null and comment_id is null)
+    or (type = 'comment' and video_id is not null and comment_id is not null)
+  ),
+  check (user_id <> actor_id)
+);
+create index if not exists notifications_user_created_idx
+  on public.notifications(user_id, created_at desc);
+create index if not exists notifications_user_unread_idx
+  on public.notifications(user_id, created_at desc) where read_at is null;
+alter table public.notifications enable row level security;
+
+drop policy if exists "Users read own notifications" on public.notifications;
+create policy "Users read own notifications"
+  on public.notifications for select to authenticated
+  using ((select auth.uid()) = user_id);
+
+drop policy if exists "Users mark own notifications read" on public.notifications;
+create policy "Users mark own notifications read"
+  on public.notifications for update to authenticated
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
+
+drop policy if exists "Users create valid social notifications" on public.notifications;
+create policy "Users create valid social notifications"
+  on public.notifications for insert to authenticated
+  with check (
+    actor_id = (select auth.uid())
+    and user_id <> (select auth.uid())
+    and (
+      (
+        type = 'follow'
+        and exists (
+          select 1 from public.follows f
+          where f.follower_id = (select auth.uid())
+            and f.following_id = notifications.user_id
+        )
+      )
+      or (
+        type = 'like'
+        and exists (
+          select 1 from public.user_videos v
+          where v.user_id = notifications.user_id
+            and v.video_id = notifications.video_id
+        )
+        and exists (
+          select 1 from public.likes l
+          where l.user_id = (select auth.uid())
+            and l.video_id = notifications.video_id
+        )
+      )
+      or (
+        type = 'comment'
+        and exists (
+          select 1 from public.user_videos v
+          where v.user_id = notifications.user_id
+            and v.video_id = notifications.video_id
+        )
+        and exists (
+          select 1 from public.comments c
+          where c.id = notifications.comment_id
+            and c.user_id = (select auth.uid())
+            and c.video_id = notifications.video_id
+        )
+      )
+    )
+  );
+
+
+-- User publications: validated public TikTok links attached to a profile.
+create table if not exists public.user_videos (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  video_id text not null,
+  video_url text not null,
+  author text not null,
+  author_url text not null default '',
+  title text not null default '',
+  hashtags text[] not null default '{}',
+  music text,
+  thumbnail text,
+  categories text[] not null default '{}',
+  created_at timestamptz not null default now(),
+  unique(user_id, video_id)
+);
+create index if not exists user_videos_user_created_idx on public.user_videos(user_id, created_at desc);
+alter table public.user_videos enable row level security;
+drop policy if exists "Published videos are publicly readable" on public.user_videos;
+create policy "Published videos are publicly readable" on public.user_videos for select to anon, authenticated using (true);
+drop policy if exists "Users publish their own videos" on public.user_videos;
+create policy "Users publish their own videos" on public.user_videos for insert to authenticated with check ((select auth.uid()) = user_id);
+drop policy if exists "Users delete their own videos" on public.user_videos;
+create policy "Users delete their own videos" on public.user_videos for delete to authenticated using ((select auth.uid()) = user_id);

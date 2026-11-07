@@ -11,7 +11,7 @@ import {
   useStore,
 } from "@/hooks/useStore";
 import { clampIndex, decideSwipe, needsMore, nextPass, playerIndexes, toSlides, visibleIndexes } from "@/lib/feedEngine";
-import { buildPass } from "@/lib/recommend";
+import { buildPass, isRussianVideo } from "@/lib/recommend";
 import { normalizeUrl } from "@/lib/tiktok";
 import { CATEGORIES, type FeedMode, type Slide, type VideoItem } from "@/lib/types";
 import {
@@ -27,12 +27,14 @@ import {
 import Sheet, { reasonLabel, type AddResult } from "./Sheet";
 import VideoSlide from "./VideoSlide";
 import AccountPanel from "./AccountPanel";
+import CommentsPanel from "./CommentsPanel";
 import { getSupabase, type AccountIdentity } from "@/lib/supabase";
 
 type Playback = "loading" | "playing" | "paused" | "error";
 
 const CHIPS: { id: FeedMode; label: string }[] = [
   { id: "foryou", label: "Для тебя" },
+  { id: "subscriptions", label: "Подписки" },
   { id: "random", label: "Случайные" },
   ...CATEGORIES.map((c) => ({ id: c.id as FeedMode, label: c.label })),
   { id: "favorites", label: "Избранное" },
@@ -42,6 +44,7 @@ const CHIPS: { id: FeedMode; label: string }[] = [
 const EMPTY_TEXT: Partial<Record<FeedMode, string>> = {
   favorites: "В избранном пока пусто. Нажмите на закладку у любого ролика.",
   history: "История пуста — посмотрите несколько роликов.",
+  subscriptions: "Здесь будут новые видео авторов, на которых вы подписались. Войдите и подпишитесь на авторов.",
 };
 
 export default function Feed() {
@@ -52,6 +55,7 @@ export default function Feed() {
   const [customLoaded, setCustomLoaded] = useState(false);
   const [removed, setRemoved] = useState<string[]>([]);
   const [discovered, setDiscovered] = useState<VideoItem[]>([]);
+  const [subscriptionItems, setSubscriptionItems] = useState<VideoItem[]>([]);
   const [discoverInfo, setDiscoverInfo] = useState<{ configured: boolean; intervalMin: number } | null>(null);
 
   const [queue, setQueue] = useState<Slide[]>([]);
@@ -59,14 +63,14 @@ export default function Feed() {
   const [playback, setPlayback] = useState<Playback>("loading");
   const [unlocked, setUnlocked] = useState(false);
   const [needsTap, setNeedsTap] = useState(false);
-  const [nextReady, setNextReady] = useState(false);
-  const [next2Ready, setNext2Ready] = useState(false);
   const [reloads, setReloads] = useState<Record<string, number>>({});
   const [sheet, setSheet] = useState(false);
   const [nonce, setNonce] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
   const [isFs, setIsFs] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [accountUser, setAccountUser] = useState<AccountIdentity | null>(null);
 
   const mode = store.category;
@@ -97,7 +101,9 @@ export default function Feed() {
   const soundTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const wasPlayingRef = useRef(false);
   const priorityRef = useRef<string[]>([]);
+  const accountOwnerRef = useRef<string | null>(null);
   const reloadCountRef = useRef<Record<string, number>>({});
+  const socialPendingRef = useRef(new Set<string>());
   // Параметры iframe фиксируются, пока плеер смонтирован: смена src перезагрузила бы его.
   const srcOpts = useRef(new Map<string, { muted: boolean; loop: boolean }>());
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -113,11 +119,11 @@ export default function Feed() {
 
   const pool = useMemo(() => {
     const map = new Map<string, VideoItem>();
-    [...catalog, ...discovered, ...customItems].forEach((v) => {
+    [...subscriptionItems, ...catalog, ...discovered, ...customItems].forEach((v) => {
       if (!map.has(v.id) && !removed.includes(v.id)) map.set(v.id, v);
     });
     return Array.from(map.values());
-  }, [catalog, discovered, customItems, removed]);
+  }, [subscriptionItems, catalog, discovered, customItems, removed]);
   poolRef.current = pool;
 
   const showToast = useCallback((msg: string) => {
@@ -199,8 +205,11 @@ export default function Feed() {
     if (m === "favorites" || m === "history" || queueRef.current.length === 0) return;
     const inQueue = new Set(queueRef.current.map((s) => s.item.id));
     const fits = fresh.filter(
-      (v) => !inQueue.has(v.id) && (m === "foryou" || m === "random" || v.categories.includes(m)),
+      (v) => !inQueue.has(v.id) && (m === "foryou" || m === "random" || CATEGORIES.some((category) => category.id === m && v.categories.includes(category.id))),
     );
+    if (m === "foryou" || m === "random") {
+      fits.sort((a, b) => Number(isRussianVideo(b)) - Number(isRussianVideo(a)));
+    }
     if (!fits.length) return;
     const slides: Slide[] = fits.slice(0, 10).map((item) => ({ key: `${item.id}#f`, item, cycle: 0 }));
     const at = Math.min(indexRef.current + 2, queueRef.current.length);
@@ -233,28 +242,103 @@ export default function Feed() {
   }, [injectFresh, showToast]);
 
   useEffect(() => {
-    if (!accountUser) return;
+    const previousOwner = accountOwnerRef.current;
+    const nextOwner = accountUser?.id ?? null;
+    accountOwnerRef.current = nextOwner;
+
+    // Не переносим личные данные одного аккаунта в другой и не оставляем их после выхода.
+    if (!nextOwner) {
+      if (previousOwner) update((s) => ({ ...s, likes: [], favs: [], history: [] }));
+      return;
+    }
+
+    if (previousOwner !== nextOwner) {
+      update((s) => ({ ...s, likes: [], favs: [], history: [] }));
+    }
     const supabase = getSupabase();
     if (!supabase) return;
     let cancelled = false;
     (async () => {
       const [likesResult, favoritesResult, historyResult] = await Promise.all([
-        supabase.from("likes").select("video_id").eq("user_id", accountUser.id),
-        supabase.from("favorites").select("video_id").eq("user_id", accountUser.id),
-        supabase.from("watch_history").select("video_id,watched_at").eq("user_id", accountUser.id).order("watched_at", { ascending: false }).limit(300),
+        supabase.from("likes").select("video_id").eq("user_id", nextOwner),
+        supabase.from("favorites").select("video_id").eq("user_id", nextOwner),
+        supabase.from("watch_history").select("video_id,watched_at").eq("user_id", nextOwner).order("watched_at", { ascending: false }).limit(300),
       ]);
       if (cancelled) return;
-      if (likesResult.data || favoritesResult.data || historyResult.data) {
-        update((s) => ({
-          ...s,
-          likes: Array.from(new Set([...s.likes, ...(likesResult.data ?? []).map((x: {video_id:string}) => x.video_id)])),
-          favs: Array.from(new Set([...s.favs, ...(favoritesResult.data ?? []).map((x: {video_id:string}) => x.video_id)])),
-          history: [...s.history, ...(historyResult.data ?? []).map((x: {video_id:string;watched_at:string}) => ({ id:x.video_id, ts:Date.parse(x.watched_at) || Date.now() }))].slice(-300),
-        }));
+      if (likesResult.error || favoritesResult.error || historyResult.error) {
+        showToast("Не удалось полностью синхронизировать данные аккаунта");
+        return;
       }
+      update((s) => ({
+        ...s,
+        likes: Array.from(new Set((likesResult.data ?? []).map((x: {video_id:string}) => x.video_id))),
+        favs: Array.from(new Set((favoritesResult.data ?? []).map((x: {video_id:string}) => x.video_id))),
+        history: (historyResult.data ?? []).map((x: {video_id:string;watched_at:string}) => ({ id:x.video_id, ts:Date.parse(x.watched_at) || Date.now() })),
+      }));
     })();
     return () => { cancelled = true; };
-  }, [accountUser?.id, update]);
+  }, [accountUser?.id, update, showToast]);
+
+  useEffect(() => {
+    if (mode !== "subscriptions") return;
+    if (!accountUser) {
+      setSubscriptionItems([]);
+      return;
+    }
+    const supabase = getSupabase();
+    if (!supabase) {
+      setSubscriptionItems([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data: follows, error: followsError } = await supabase
+        .from("follows")
+        .select("following_id")
+        .eq("follower_id", accountUser.id);
+      if (cancelled) return;
+      if (followsError) {
+        setSubscriptionItems([]);
+        showToast("Не удалось загрузить подписки");
+        return;
+      }
+      const creatorIds = (follows ?? []).map((row: { following_id: string }) => row.following_id);
+      if (!creatorIds.length) {
+        setSubscriptionItems([]);
+        return;
+      }
+      const { data, error } = await supabase
+        .from("user_videos")
+        .select("user_id,video_id,video_url,author,author_url,title,hashtags,music,thumbnail,categories,created_at")
+        .in("user_id", creatorIds)
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (cancelled) return;
+      if (error) {
+        setSubscriptionItems([]);
+        showToast("Не удалось загрузить видео подписок");
+        return;
+      }
+      setSubscriptionItems((data ?? []).map((row: {
+        user_id: string; video_id: string; video_url: string; author: string; author_url: string;
+        title: string; hashtags: string[]; music: string | null; thumbnail: string | null;
+        categories: string[]; created_at: string;
+      }) => ({
+        id: row.video_id,
+        url: row.video_url,
+        author: row.author,
+        authorUrl: row.author_url,
+        title: row.title,
+        hashtags: row.hashtags ?? [],
+        music: row.music,
+        thumbnail: row.thumbnail,
+        categories: (row.categories ?? []) as VideoItem["categories"],
+        publishedAt: row.created_at,
+        ownerId: row.user_id,
+      })));
+    })();
+    return () => { cancelled = true; };
+  }, [mode, accountUser?.id, accountOpen, showToast]);
 
   const bootstrapped = ready && catalogState !== "loading" && customLoaded;
 
@@ -337,13 +421,8 @@ export default function Feed() {
       clearTimeout(fallbackRef.current);
       fallbackRef.current = setTimeout(() => {
         if (confirmedRef.current || currentKeyRef.current !== key) return;
-        if (readyRef.current.has(key)) {
-          // плеер готов, но не играет (обычно запрет автозапуска) — просим коснуться экрана
-          setNeedsTap(true);
-          setPlayback("paused");
-          return;
-        }
-        // плеер вообще не ответил: одна перезагрузка, затем ошибка с кнопкой «Повторить»
+        // Тайм-аут сам по себе не доказывает, что ролик удалён: TikTok может долго отвечать.
+        // Делаем одну повторную загрузку, затем показываем действия вместо бесконечного автопропуска.
         const n = reloadCountRef.current[key] ?? 0;
         if (n >= 1) {
           setPlayback("error");
@@ -351,9 +430,12 @@ export default function Feed() {
         }
         reloadCountRef.current[key] = n + 1;
         reloadCurrent(!soundRef.current);
-      }, 7000);
+        fallbackRef.current = setTimeout(() => {
+          if (!confirmedRef.current && currentKeyRef.current === key) setPlayback("error");
+        }, 8000);
+      }, 10000);
     },
-    [post, reloadCurrent, ensureSound],
+    [post, reloadCurrent, ensureSound, applyTransform, showToast],
   );
 
   /* ---------- сборка очереди ---------- */
@@ -361,6 +443,7 @@ export default function Feed() {
     likes: storeRef.current.likes,
     favs: storeRef.current.favs,
     history: storeRef.current.history,
+    notInterested: storeRef.current.notInterested ?? [],
   });
 
   useEffect(() => {
@@ -376,7 +459,7 @@ export default function Feed() {
     setPlayback("loading");
     applyTransform(0, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bootstrapped, mode, nonce]);
+  }, [bootstrapped, mode, nonce, subscriptionItems]);
 
   /* бесконечная подгрузка: когда доходим до конца очереди, добавляем новый проход по каталогу */
   useEffect(() => {
@@ -410,8 +493,6 @@ export default function Feed() {
     if (!currentKey) return;
     setNeedsTap(false);
     setPlayback("loading");
-    setNextReady(false);
-    setNext2Ready(false);
     confirmedRef.current = false;
     if (progressRef.current) progressRef.current.style.transform = "scaleX(0)";
     activate(currentKey);
@@ -425,25 +506,10 @@ export default function Feed() {
         void supabase.from("watch_history").insert({ user_id: accountUser.id, video_id: id, watched_at: new Date().toISOString() });
       }
     }, 1500);
-    // следующий ролик начинаем грузить, только когда текущий уже играет (или через 4 с),
-    // чтобы два тяжёлых плеера не делили канал на старте
-    const tNext = setTimeout(() => setNextReady(true), 4000);
     return () => {
       clearTimeout(tHistory);
-      clearTimeout(tNext);
     };
   }, [currentKey, activate, update, accountUser]);
-
-  useEffect(() => {
-    if (playback === "playing") setNextReady(true);
-  }, [playback]);
-
-  /* второй ролик вперёд начинаем грузить, когда следующий уже ответил (или через 2,5 с после него) */
-  useEffect(() => {
-    if (!nextReady) return;
-    const t = setTimeout(() => setNext2Ready(true), 2500);
-    return () => clearTimeout(t);
-  }, [nextReady, currentKey]);
 
   /* звук: включили/выключили кнопкой или после жеста — применяем к текущему ролику */
   useEffect(() => {
@@ -458,7 +524,7 @@ export default function Feed() {
   }, [unlocked, store.settings.sound, post, ensureSound]);
 
   const dropVideo = useCallback(
-    (id: string) => {
+    (id: string, reason = "Видео недоступно — пропущено") => {
       const q = queueRef.current;
       const cur = indexRef.current;
       const kept = q.filter((s) => s.item.id !== id);
@@ -469,7 +535,7 @@ export default function Feed() {
       setQueue(kept);
       setIndex(newIndex);
       applyTransform(0, false);
-      showToast("Видео недоступно — пропущено");
+      showToast(reason);
     },
     [applyTransform, showToast],
   );
@@ -487,7 +553,6 @@ export default function Feed() {
         case "onPlayerReady":
           readyRef.current.add(key);
           if (isCur) activate(key);
-          else if (key === queueRef.current[indexRef.current + 1]?.key) setNext2Ready(true);
           break;
         case "onMute":
           mutedState.current.set(key, !!d.value);
@@ -525,13 +590,22 @@ export default function Feed() {
           const v = d.value as { errorCode?: number } | number | undefined;
           const code = typeof v === "number" ? v : v?.errorCode;
           if (code === 1001) {
+            // TikTok explicitly reports INVALID_VIDEO: this individual item can be removed.
             const id = queueRef.current.find((s) => s.key === key)?.item.id;
             if (id) dropVideo(id);
           } else if (code === 3002) {
             setNeedsTap(true);
             setPlayback("paused");
           } else {
-            setPlayback("error");
+            // Network/server/playback errors are not proof that the video is unavailable.
+            // Retry once, then let the viewer retry or skip manually.
+            const attempts = reloadCountRef.current[key] ?? 0;
+            if (attempts < 1) {
+              reloadCountRef.current[key] = attempts + 1;
+              reloadCurrent(!soundRef.current);
+            } else {
+              setPlayback("error");
+            }
           }
           break;
         }
@@ -682,18 +756,75 @@ export default function Feed() {
   const toggleIn = (field: "likes" | "favs") => {
     if (!current) return;
     const id = current.id;
+    const ownerId = accountUser?.id ?? null;
+    const pendingKey = `${ownerId ?? "guest"}:${field}:${id}`;
+    if (socialPendingRef.current.has(pendingKey)) return;
+
     const wasActive = store[field].includes(id);
+    const nextActive = !wasActive;
+    // Гостевые отметки остаются локальными. Для аккаунта синхронизируемся с БД.
+    if (!ownerId) {
+      update((s) => ({
+        ...s,
+        [field]: nextActive ? Array.from(new Set([...s[field], id])) : s[field].filter((x) => x !== id),
+      }));
+      return;
+    }
+
+    const supabase = getSupabase();
+    if (!supabase) {
+      showToast("Не удалось подключиться к сохранению. Попробуй позже.");
+      return;
+    }
+
+    socialPendingRef.current.add(pendingKey);
+    // Быстрый отклик интерфейса; при ошибке возвращаем прежнее состояние.
     update((s) => ({
       ...s,
-      [field]: s[field].includes(id) ? s[field].filter((x) => x !== id) : [...s[field], id],
+      [field]: nextActive ? Array.from(new Set([...s[field], id])) : s[field].filter((x) => x !== id),
     }));
-    const supabase = getSupabase();
-    if (accountUser && supabase) {
-      const table = field === "likes" ? "likes" : "favorites";
-      void (wasActive
-        ? supabase.from(table).delete().eq("user_id", accountUser.id).eq("video_id", id)
-        : supabase.from(table).upsert({ user_id: accountUser.id, video_id: id }, { onConflict: "user_id,video_id" }));
-    }
+
+    void (async () => {
+      try {
+        const { data: authData, error: authError } = await supabase.auth.getUser();
+        if (authError) throw authError;
+        if (!authData.user || authData.user.id !== ownerId) {
+          throw new Error("Сессия аккаунта изменилась. Войди снова.");
+        }
+
+        const table = field === "likes" ? "likes" : "favorites";
+        const result = nextActive
+          ? await supabase.from(table).insert({ user_id: ownerId, video_id: id })
+          : await supabase.from(table).delete().eq("user_id", ownerId).eq("video_id", id);
+
+        // Если локальный кэш отстал от БД, повторный insert означает, что запись уже есть.
+        if (result.error && !(nextActive && result.error.code === "23505")) throw result.error;
+
+        if (nextActive && field === "likes" && current.ownerId && current.ownerId !== ownerId) {
+          await supabase.from("notifications").insert({
+            user_id: current.ownerId,
+            actor_id: ownerId,
+            type: "like",
+            video_id: id,
+          });
+        }
+      } catch (error) {
+        update((s) => ({
+          ...s,
+          [field]: wasActive ? Array.from(new Set([...s[field], id])) : s[field].filter((x) => x !== id),
+        }));
+        showToast(field === "likes" ? "Не удалось сохранить лайк" : "Не удалось сохранить избранное");
+      } finally {
+        socialPendingRef.current.delete(pendingKey);
+      }
+    })();
+  };
+
+  const markNotInterested = () => {
+    if (!current) return;
+    const id = current.id;
+    update((s) => ({ ...s, notInterested: Array.from(new Set([...(s.notInterested ?? []), id])) }));
+    dropVideo(id, "Будем реже показывать такие ролики");
   };
 
   const share = async () => {
@@ -725,7 +856,10 @@ export default function Feed() {
     showToast("Лента обновлена");
   };
 
-  const setMode = (m: FeedMode) => update((s) => ({ ...s, category: m }));
+  const setMode = (m: FeedMode) => {
+    update((s) => ({ ...s, category: m }));
+    if (m === "subscriptions" && !accountUser) setAccountOpen(true);
+  };
 
   const onSoundButton = () => {
     if (!unlocked && store.settings.sound) {
@@ -775,22 +909,14 @@ export default function Feed() {
   };
 
   /* ---------- отрисовка ---------- */
-  // уже смонтированные (прогретые) плееры не выгружаем при листании; новые подключаем по очереди: +1, затем +2
-  const players = new Set(
-    playerIndexes(index, queue.length).filter(
-      (i) =>
-        i === index ||
-        srcOpts.current.has(queue[i].key) ||
-        (i === index + 1 && nextReady) ||
-        (i === index + 2 && next2Ready),
-    ),
-  );
+  // Один активный iframe: соседние слайды показываются только как лёгкие постеры.
+  const players = new Set(playerIndexes(index, queue.length));
   const visible = visibleIndexes(index, queue.length);
   const showSpinner = !!current && playback === "loading";
   const soundOn = unlocked && store.settings.sound;
 
   return (
-    <div ref={rootRef} className="relative h-dvh w-full select-none overflow-hidden bg-black" data-testid="feed">
+    <div ref={rootRef} data-theme={store.settings.theme ?? "dark"} className="relative h-dvh w-full select-none overflow-hidden bg-black" data-testid="feed">
       {/* лента */}
       <div ref={trackRef} className="absolute inset-0 will-change-transform" data-testid="track">
         {visible.map((i) => {
@@ -874,22 +1000,28 @@ export default function Feed() {
 
       {/* верхняя панель */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-30 bg-gradient-to-b from-black/70 to-transparent pt-[max(0.5rem,env(safe-area-inset-top))]">
-        <div className="flex items-center justify-between px-3">
-          <span className="logo-glitch text-base font-extrabold tracking-tight">TikTok Mod Web</span>
+        <div className="feed-header flex items-center justify-between px-3">
+          <span className="logo-glitch feed-logo text-base font-extrabold tracking-tight">TikTok Mod Web</span>
+          <a href="/search" aria-label="Поиск" title="Поиск" className="feed-icon-button rounded-full px-2 py-2 text-sm font-semibold">⌕</a>
+          <a href="/winter-fest" aria-label="Winter Fest 2027" title="Winter Fest 2027" className="feed-icon-button rounded-full px-2 py-2 text-sm">❄</a>
           <div className="pointer-events-auto flex items-center gap-1">
-            <button aria-label="Профиль и аккаунт" onClick={() => setAccountOpen(true)} className="rounded-full px-2 py-1 text-lg hover:bg-white/10">
+            <button aria-label="Настройки" title="Настройки" onClick={() => setSettingsOpen(true)} className="feed-icon-button rounded-full p-2 text-lg">⚙</button>
+            <button aria-label="Профиль и аккаунт" onClick={() => setAccountOpen(true)} className="feed-icon-button rounded-full px-2 py-1 text-lg">
               {accountUser ? "👤" : "♙"}
             </button>
-            <button aria-label="Обновить ленту" onClick={refresh} className="rounded-full p-2 hover:bg-white/10">
+            <a href="/updates" aria-label="Журнал обновлений" title="Журнал обновлений" className="feed-icon-button rounded-full px-3 py-2 text-xs font-semibold whitespace-nowrap">
+              ↻ Обновления
+            </a>
+            <button aria-label="Обновить ленту" onClick={refresh} className="feed-icon-button rounded-full p-2">
               <RefreshIcon />
             </button>
-            <button aria-label="Звук" onClick={onSoundButton} className="rounded-full p-2 hover:bg-white/10">
+            <button aria-label="Звук" onClick={onSoundButton} className="feed-icon-button rounded-full p-2">
               <VolumeIcon filled={soundOn} />
             </button>
-            <button aria-label="Во весь экран" onClick={toggleFullscreen} className="rounded-full p-2 hover:bg-white/10">
+            <button aria-label="Во весь экран" onClick={toggleFullscreen} className="feed-icon-button rounded-full p-2">
               <FullscreenIcon className={isFs ? "text-brand-cyan" : ""} />
             </button>
-            <button aria-label="Добавить видео" onClick={() => setSheet(true)} className="rounded-full p-2 hover:bg-white/10">
+            <button aria-label="Добавить видео" onClick={() => setSheet(true)} className="feed-icon-button rounded-full p-2">
               <PlusIcon />
             </button>
           </div>
@@ -900,8 +1032,8 @@ export default function Feed() {
               key={c.id}
               data-testid={`chip-${c.id}`}
               onClick={() => setMode(c.id)}
-              className={`shrink-0 rounded-full px-3 py-1 text-sm font-medium transition-colors ${
-                mode === c.id ? "bg-white text-black" : "bg-white/15 text-white"
+              className={`feed-chip shrink-0 rounded-full px-3 py-1 text-sm font-medium transition-colors ${
+                mode === c.id ? "feed-chip-active" : ""
               }`}
             >
               {c.label}
@@ -912,25 +1044,58 @@ export default function Feed() {
 
       {/* правая панель действий */}
       {current && (
-        <div className="absolute bottom-[max(7rem,calc(env(safe-area-inset-bottom)+6rem))] right-2 z-30 flex flex-col items-center gap-5">
-          <button aria-label="Лайк" data-testid="like" onClick={() => toggleIn("likes")} className="flex flex-col items-center">
+        <div className="feed-action-rail absolute bottom-[calc(env(safe-area-inset-bottom)+5rem)] right-2 z-30 flex flex-col items-center gap-5 sm:bottom-[max(7rem,calc(env(safe-area-inset-bottom)+6rem))]">
+          <button aria-label="Лайк" data-testid="like" onClick={() => toggleIn("likes")} className="feed-action flex flex-col items-center">
             <HeartIcon filled={liked} className={`h-9 w-9 drop-shadow ${liked ? "pop text-brand-red" : ""}`} />
             <span className="text-xs">{liked ? "Нравится" : "Лайк"}</span>
           </button>
-          <button aria-label="В избранное" data-testid="fav" onClick={() => toggleIn("favs")} className="flex flex-col items-center">
+          <button aria-label="В избранное" data-testid="fav" onClick={() => toggleIn("favs")} className="feed-action flex flex-col items-center">
             <BookmarkIcon filled={faved} className={`h-9 w-9 drop-shadow ${faved ? "pop text-yellow-300" : ""}`} />
             <span className="text-xs">{faved ? "В избранном" : "Избранное"}</span>
           </button>
-          <button aria-label="Поделиться" onClick={share} className="flex flex-col items-center">
+          <button aria-label="Комментарии" onClick={() => setCommentsOpen(true)} className="feed-action flex flex-col items-center">
+            <span className="text-3xl leading-9 drop-shadow">💬</span>
+            <span className="text-xs">Комментарии</span>
+          </button>
+          <button aria-label="Не интересно" onClick={markNotInterested} className="feed-action flex flex-col items-center">
+            <span className="text-3xl leading-9 drop-shadow">👎</span>
+            <span className="text-xs">Не интересно</span>
+          </button>
+          <button aria-label="Поделиться" onClick={share} className="feed-action flex flex-col items-center">
             <ShareIcon className="h-9 w-9 drop-shadow" />
             <span className="text-xs">Поделиться</span>
           </button>
         </div>
       )}
 
+      {/* мобильная навигация: основные разделы доступны одной рукой */}
+      <nav aria-label="Основная навигация" className="mobile-bottom-nav sm:hidden">
+        <button type="button" aria-label="Для тебя" aria-current={mode === "foryou" ? "page" : undefined} onClick={() => setMode("foryou")} className={mode === "foryou" ? "is-active" : ""}>
+          <span aria-hidden="true">⌂</span><small>Для тебя</small>
+        </button>
+        <button type="button" aria-label="Подписки" aria-current={mode === "subscriptions" ? "page" : undefined} onClick={() => setMode("subscriptions")} className={mode === "subscriptions" ? "is-active" : ""}>
+          <span aria-hidden="true">♧</span><small>Подписки</small>
+        </button>
+        <a href="/search" aria-label="Поиск" className="mobile-nav-link">
+          <span aria-hidden="true">⌕</span><small>Поиск</small>
+        </a>
+        <button type="button" aria-label="Добавить видео" onClick={() => setSheet(true)}>
+          <span aria-hidden="true">＋</span><small>Добавить</small>
+        </button>
+        <a href="/updates" aria-label="Update Log" data-testid="mobile-updates-link" className="mobile-nav-link">
+          <span aria-hidden="true">↻</span><small>Обновления</small>
+        </a>
+        <button type="button" aria-label="Профиль" onClick={() => setAccountOpen(true)}>
+          <span aria-hidden="true">♙</span><small>Профиль</small>
+        </button>
+        <button type="button" aria-label="Настройки" onClick={() => setSettingsOpen(true)}>
+          <span aria-hidden="true">⚙</span><small>Настройки</small>
+        </button>
+      </nav>
+
       {/* информация о ролике */}
       {current && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 bg-gradient-to-t from-black/80 via-black/30 to-transparent px-3 pb-[max(1rem,env(safe-area-inset-bottom))] pt-16 pr-20">
+        <div className="feed-caption pointer-events-none absolute inset-x-0 bottom-0 z-30 bg-gradient-to-t from-black/90 via-black/35 to-transparent px-3 pb-[calc(env(safe-area-inset-bottom)+4.5rem)] pt-16 pr-20 sm:pb-[max(1rem,env(safe-area-inset-bottom))]">
           <a
             href={current.authorUrl || current.url}
             target="_blank"
@@ -979,9 +1144,15 @@ export default function Feed() {
                 </p>
               )}
               <div className="flex gap-3">
-                <button className="rounded-lg bg-brand-red px-4 py-2 font-semibold" onClick={() => setSheet(true)}>
-                  Добавить видео
-                </button>
+                {mode === "subscriptions" ? (
+                  <button className="rounded-lg bg-brand-red px-4 py-2 font-semibold" onClick={() => setAccountOpen(true)}>
+                    Профиль и подписки
+                  </button>
+                ) : (
+                  <button className="rounded-lg bg-brand-red px-4 py-2 font-semibold" onClick={() => setSheet(true)}>
+                    Добавить видео
+                  </button>
+                )}
                 <button className="rounded-lg bg-white/15 px-4 py-2" onClick={refresh}>
                   Повторить
                 </button>
@@ -997,6 +1168,36 @@ export default function Feed() {
         </div>
       )}
 
+      {settingsOpen && (
+        <div className="settings-backdrop fixed inset-0 z-[80] flex items-end justify-center bg-black/75 p-0 sm:items-center sm:p-4" onClick={() => setSettingsOpen(false)}>
+          <section className="settings-panel max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-white/10 bg-neutral-950 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-white shadow-2xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
+            <header className="mb-5 flex items-center justify-between gap-3">
+              <div><p className="text-xs font-semibold uppercase tracking-widest text-cyan-300">TikTok Mod Web</p><h2 className="text-2xl font-bold">Настройки</h2></div>
+              <button onClick={() => setSettingsOpen(false)} className="rounded-full border border-white/15 px-3 py-2 text-sm">Закрыть</button>
+            </header>
+            <div className="space-y-5">
+              <section><h3 className="mb-2 font-semibold">Оформление</h3><div className="grid grid-cols-2 gap-2">
+                <button onClick={() => update((s) => ({ ...s, settings: { ...s.settings, theme: "dark" } }))} className={`rounded-xl border px-4 py-3 text-sm ${store.settings.theme !== "light" ? "border-cyan-300 bg-cyan-300/15" : "border-white/15 bg-white/5"}`}>🌙 Тёмная тема</button>
+                <button onClick={() => update((s) => ({ ...s, settings: { ...s.settings, theme: "light" } }))} className={`rounded-xl border px-4 py-3 text-sm ${store.settings.theme === "light" ? "border-cyan-500 bg-cyan-500/15" : "border-white/15 bg-white/5"}`}>☀️ Светлая тема</button>
+              </div></section>
+              <section className="space-y-3 border-t border-white/10 pt-4"><h3 className="font-semibold">Воспроизведение</h3>
+                <label className="flex items-center justify-between gap-3 text-sm">Качество видео <span className="rounded-lg bg-white/10 px-3 py-2 text-xs">Авто</span></label>
+                <p className="text-xs opacity-60">Встроенный плеер TikTok сам выбирает качество. Ручное переключение качества для таких роликов сайт пока не поддерживает.</p>
+                <label className="flex items-center justify-between gap-3 text-sm">Звук включён<input type="checkbox" checked={store.settings.sound} onChange={(e) => update((s) => ({ ...s, settings: { ...s.settings, sound: e.target.checked } }))} className="h-5 w-5 accent-[#fe2c55]" /></label>
+                <label className="flex items-center justify-between gap-3 text-sm">Автопереход после окончания ролика<input type="checkbox" checked={store.settings.autoNext} onChange={(e) => update((s) => ({ ...s, settings: { ...s.settings, autoNext: e.target.checked } }))} className="h-5 w-5 accent-[#fe2c55]" /></label>
+              </section>
+              <section className="space-y-2 border-t border-white/10 pt-4"><h3 className="font-semibold">TikTok Mod Web</h3><a href="/updates" className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm hover:bg-white/10"><span>📋 Журнал обновлений</span><span>Открыть →</span></a><button onClick={() => { setSettingsOpen(false); setAccountOpen(true); }} className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm">👤 Аккаунт и профиль <span>Открыть →</span></button></section>
+            </div>
+          </section>
+        </div>
+      )}
+      <CommentsPanel
+        open={commentsOpen}
+        video={current ?? null}
+        user={accountUser}
+        onClose={() => setCommentsOpen(false)}
+        onLogin={() => { setCommentsOpen(false); setAccountOpen(true); }}
+      />
       <AccountPanel
         open={accountOpen}
         onClose={() => setAccountOpen(false)}

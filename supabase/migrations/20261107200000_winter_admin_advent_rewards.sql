@@ -1,0 +1,1 @@
+create policy "Winter admins manage advent rewards" on public.winter_advent_rewards for all to authenticated using ((select auth.jwt() -> 'app_metadata' ->> 'role') = 'admin') with check ((select auth.jwt() -> 'app_metadata' ->> 'role') = 'admin'); grant insert, update, delete on public.winter_advent_rewards to authenticated;

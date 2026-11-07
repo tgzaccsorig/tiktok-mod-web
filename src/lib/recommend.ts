@@ -4,6 +4,7 @@ export type Ctx = {
   likes: string[];
   favs: string[];
   history: { id: string; ts: number }[];
+  notInterested?: string[];
 };
 
 export function shuffle<T>(arr: T[], rng: () => number = Math.random): T[] {
@@ -13,6 +14,14 @@ export function shuffle<T>(arr: T[], rng: () => number = Math.random): T[] {
     [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
+}
+
+/** Russian-language filter for the For You and Random feeds. */
+export function isRussianVideo(v: VideoItem): boolean {
+  const text = (v.title + " " + v.hashtags.join(" ")).toLocaleLowerCase("ru");
+  const letters = text.match(/[a-zа-яё]/gi) ?? [];
+  const cyrillic = text.match(/[а-яё]/gi) ?? [];
+  return cyrillic.length >= 3 && letters.length > 0 && cyrillic.length / letters.length >= 0.35;
 }
 
 /** Собственный алгоритм подбора: учитывает лайки, избранное и просмотры по категориям и авторам. */
@@ -39,13 +48,22 @@ export function rank(pool: VideoItem[], ctx: Ctx, rng: () => number = Math.rando
     const cat = v.categories.reduce((s, c) => s + (catAff[c] ?? 0), 0);
     const aut = (authorAff[v.author] ?? 0) * 1.5;
     const novelty = seen[v.id] ? -Math.min(seen[v.id], 6) * 0.5 : 2;
-    return cat + aut + novelty + rng() * 1.5;
+    const russianBoost = isRussianVideo(v) ? 8 : 0;
+    const notInterestedPenalty = ctx.notInterested?.includes(v.id) ? -20 : 0;
+    return cat + aut + novelty + russianBoost + notInterestedPenalty + rng() * 1.5;
   };
 
-  return pool
+  const remaining = pool
     .map((v) => ({ v, s: score(v) }))
-    .sort((a, b) => b.s - a.s)
-    .map((x) => x.v);
+    .sort((a, b) => b.s - a.s);
+  const diversified: VideoItem[] = [];
+  while (remaining.length) {
+    const previousAuthor = diversified[diversified.length - 1]?.author;
+    const nextIndex = remaining.findIndex((item) => item.v.author !== previousAuthor);
+    const chosen = remaining.splice(nextIndex >= 0 ? nextIndex : 0, 1)[0];
+    diversified.push(chosen.v);
+  }
+  return diversified;
 }
 
 /** Один проход ленты для выбранного режима. */
@@ -58,6 +76,10 @@ export function buildPass(
 ): VideoItem[] {
   const byId = new Map(pool.map((v) => [v.id, v]));
   let list: VideoItem[];
+  const recentIds = new Set(ctx.history.slice().sort((a, b) => b.ts - a.ts).slice(0, 50).map((item) => item.id));
+  const freshPool = pool.filter((video) => !recentIds.has(video.id));
+  // Не повторяем недавно просмотренное, пока есть другие ролики. Если каталог исчерпан — лента остаётся бесконечной.
+  const discoveryPool = freshPool.length ? freshPool : pool;
 
   if (mode === "favorites") {
     list = ctx.favs
@@ -73,16 +95,24 @@ export function buildPass(
       .filter((h) => (seen.has(h.id) ? false : (seen.add(h.id), true)))
       .map((h) => byId.get(h.id))
       .filter((v): v is VideoItem => !!v);
+  } else if (mode === "subscriptions") {
+    list = pool
+      .filter((v) => !!v.publishedAt)
+      .sort((a, b) => Date.parse(b.publishedAt ?? "") - Date.parse(a.publishedAt ?? ""));
   } else if (mode === "random") {
-    list = shuffle(pool, rng);
+    const hidden = new Set(ctx.notInterested ?? []);
+    const preferredPool = discoveryPool.filter((v) => !hidden.has(v.id));
+    const hiddenPool = discoveryPool.filter((v) => hidden.has(v.id));
+    const russian = preferredPool.filter(isRussianVideo);
+    const other = preferredPool.filter((v) => !isRussianVideo(v));
+    list = [...shuffle(russian, rng), ...shuffle(other, rng), ...shuffle(hiddenPool, rng)];
   } else if (mode === "foryou") {
-    list = rank(pool, ctx, rng);
+    list = rank(discoveryPool, ctx, rng);
   } else {
-    list = rank(
-      pool.filter((v) => v.categories.includes(mode)),
-      ctx,
-      rng,
-    );
+    const categoryPool = pool.filter((v) => v.categories.includes(mode));
+    const freshCategoryPool = categoryPool.filter((v) => !recentIds.has(v.id));
+    // Категория не должна становиться пустой только потому, что её ролики недавно смотрели.
+    list = rank(freshCategoryPool.length ? freshCategoryPool : categoryPool, ctx, rng);
   }
 
   if (priorityIds.length) {

@@ -24,7 +24,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="preconnect" href="https://www.tiktok.com" />
         <link rel="dns-prefetch" href="https://www.tiktok.com" />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <a
+          href="/updates"
+          className="fixed right-3 top-24 z-50 hidden rounded-full sm:inline-flex border border-white/20 bg-black/75 px-3 py-2 text-xs font-semibold text-white shadow-lg backdrop-blur transition hover:bg-white/15"
+        >
+          Обновления
+        </a>
+      </body>
     </html>
   );
 }

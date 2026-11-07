@@ -51,7 +51,7 @@ export default function Sheet(p: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60" onClick={p.onClose}>
       <div
-        className="max-h-[85dvh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-neutral-900 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl"
+        className="video-sheet max-h-[90dvh] w-full max-w-lg overflow-y-auto overscroll-contain rounded-t-2xl bg-neutral-900 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl"
         onClick={(e) => e.stopPropagation()}
         data-testid="sheet"
       >
