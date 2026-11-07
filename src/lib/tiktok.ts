@@ -79,11 +79,11 @@ export type OembedResult =
   | { ok: true; item: VideoItem }
   | { ok: false; reason: "not_allowed" | "unavailable" | "not_video" | "network" };
 
-async function oembedOnce(url: string): Promise<OembedResult> {
+async function oembedOnce(url: string, timeoutMs = 6000): Promise<OembedResult> {
   try {
     const res = await fetch(`https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`, {
       next: { revalidate: 3600 },
-      signal: AbortSignal.timeout(6000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (res.status === 400 || res.status === 404) return { ok: false, reason: "unavailable" };
     if (!res.ok) return { ok: false, reason: "network" };
@@ -95,11 +95,18 @@ async function oembedOnce(url: string): Promise<OembedResult> {
   }
 }
 
-/** Серверная проверка ссылки через официальный oEmbed TikTok (один повтор при временной ошибке сети/лимита). */
-export async function fetchOembed(url: string): Promise<OembedResult> {
+/** Серверная проверка ссылки через официальный oEmbed TikTok. */
+export async function fetchOembed(
+  url: string,
+  options: { timeoutMs?: number; retries?: number } = {},
+): Promise<OembedResult> {
   if (!isAllowedTikTokUrl(url)) return { ok: false, reason: "not_allowed" };
-  const first = await oembedOnce(url);
-  if (first.ok || first.reason !== "network") return first;
-  await new Promise((r) => setTimeout(r, 500));
-  return oembedOnce(url);
+  const timeoutMs = options.timeoutMs ?? 6000;
+  const retries = options.retries ?? 0;
+  let result = await oembedOnce(url, timeoutMs);
+  for (let attempt = 0; attempt < retries && !result.ok && result.reason === "network"; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    result = await oembedOnce(url, timeoutMs);
+  }
+  return result;
 }
