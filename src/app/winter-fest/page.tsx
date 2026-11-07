@@ -194,6 +194,7 @@ export default function WinterFestPage() {
         <header className="relative mt-7 overflow-hidden rounded-[2rem] border border-cyan-100/15 bg-gradient-to-br from-[#102b40] via-[#123c4a] to-[#261e45] p-6 shadow-2xl sm:p-10">
           <div className="pointer-events-none absolute -right-8 -top-12 text-[10rem] opacity-10">❄️</div>
           <p className="text-xs font-bold uppercase tracking-[0.3em] text-cyan-200">TikTok Mod Web presents</p>
+          {testPreview && <span className="mt-3 inline-flex rounded-full border border-amber-200/30 bg-amber-200/10 px-3 py-1 text-[10px] font-black tracking-widest text-amber-100">TEST MODE · ТОЛЬКО ДЛЯ АДМИНА</span>}
           <h1 className="mt-3 text-4xl font-black tracking-tight sm:text-6xl">Winter Fest <span className="text-cyan-200">2027</span></h1>
           <p className="mt-3 max-w-xl text-sm leading-6 text-white/70">Зимнее событие, SnowCoins, адвент-календарь и праздничные украшения профиля.</p>
           {!active ? <div className="mt-7">
