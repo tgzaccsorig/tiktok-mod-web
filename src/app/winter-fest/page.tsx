@@ -11,6 +11,7 @@ type ShopItem = { slug: string; name: string; description: string; icon: string;
 type Quest = { slug: string; title: string; description: string; cadence: string; goal: number; reward_coins: number };
 type Progress = { quest_slug: string; cycle_key: string; progress: number; completed_at: string | null; claimed_at: string | null };
 type Competition = { slug: string; title: string; description: string; status: string; starts_at: string; ends_at: string | null; winner_user_id: string | null };
+type Entry = { id: string; competition_slug: string; user_id: string; video_url: string; created_at: string; profile?: { username: string; display_name: string | null } | null };
 
 function helsinkiDate(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Helsinki", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
@@ -53,6 +54,7 @@ export default function WinterFestPage() {
   const [progress, setProgress] = useState<Progress[]>([]);
   const [ledger, setLedger] = useState<{ amount: number; reason: string; created_at: string }[]>([]);
   const [competitions, setCompetitions] = useState<Competition[]>([]);
+  const [entries, setEntries] = useState<Entry[]>([]);
   const [entryUrls, setEntryUrls] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -80,6 +82,7 @@ export default function WinterFestPage() {
         supabase.from("winter_shop_items").select("slug,name,description,icon,rarity,slot,price").eq("active", true).order("price"),
         supabase.from("winter_quests").select("slug,title,description,cadence,goal,reward_coins").eq("active", true),
         supabase.from("winter_competitions").select("slug,title,description,status,starts_at,ends_at,winner_user_id").order("starts_at"),
+        supabase.from("winter_competition_entries").select("id,competition_slug,user_id,video_url,created_at,profile:profiles!winter_competition_entries_user_id_fkey(username,display_name)").order("created_at", { ascending: false }).limit(100),
       ]);
       const publicError = publicResults.find((result) => result.error)?.error;
       if (publicError) throw publicError;
@@ -87,6 +90,7 @@ export default function WinterFestPage() {
       setItems((publicResults[1].data ?? []) as ShopItem[]);
       setQuests((publicResults[2].data ?? []) as Quest[]);
       setCompetitions((publicResults[3].data ?? []) as Competition[]);
+      setEntries((publicResults[4].data ?? []) as unknown as Entry[]);
       if (!currentUser) {
         setBalance(0); setClaims([]); setOwned([]); setEquipped({}); setProgress([]); setLedger([]);
         return;
@@ -254,7 +258,7 @@ export default function WinterFestPage() {
           <section className="mt-9">
             <p className="text-xs font-bold uppercase tracking-[0.25em] text-cyan-200/65">04 · Competitions</p><h2 className="mt-1 text-2xl font-extrabold">Новогодние конкурсы</h2>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
-              {competitions.length ? competitions.map((competition) => <article key={competition.slug} className="rounded-2xl border border-white/10 bg-white/[0.04] p-4"><h3 className="font-bold">{competition.title}</h3><p className="mt-2 text-sm text-white/50">{competition.description}</p><p className="mt-3 text-xs text-cyan-100/60">Статус: {competition.status}</p>{competition.winner_user_id && <p className="mt-2 text-xs text-emerald-200">Победитель определён организатором.</p>}{competition.status === "open" && <div className="mt-3 space-y-2"><input value={entryUrls[competition.slug] ?? ""} onChange={(event) => setEntryUrls((values) => ({...values,[competition.slug]:event.target.value}))} placeholder="HTTPS-ссылка на TikTok" className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm outline-none focus:border-cyan-200/50" /><button disabled={!user || busy !== null} onClick={() => void submitEntry(competition.slug)} className="rounded-lg bg-cyan-200 px-3 py-2 text-xs font-bold text-slate-950 disabled:opacity-40">Отправить заявку</button></div>}</article>) : <p className="text-sm text-white/45">Конкурсы пока не опубликованы организатором.</p>}
+              {competitions.length ? competitions.map((competition) => <article key={competition.slug} className="rounded-2xl border border-white/10 bg-white/[0.04] p-4"><h3 className="font-bold">{competition.title}</h3><p className="mt-2 text-sm text-white/50">{competition.description}</p><p className="mt-3 text-xs text-cyan-100/60">Статус: {competition.status}</p>{competition.winner_user_id && <p className="mt-2 text-xs text-emerald-200">Победитель определён организатором.</p>}<div className="mt-3 border-t border-white/10 pt-3"><p className="text-xs font-semibold text-white/60">Участники: {entries.filter((entry) => entry.competition_slug === competition.slug).length}</p>{entries.filter((entry) => entry.competition_slug === competition.slug).slice(0,8).map((entry) => <div key={entry.id} className="mt-2 flex items-center justify-between gap-2 text-xs"><span className="truncate text-white/55">@{entry.profile?.username ?? "участник"}</span><a href={entry.video_url} target="_blank" rel="noopener noreferrer" className="shrink-0 text-cyan-200 underline">Видео ↗</a></div>)}</div>{competition.status === "open" && <div className="mt-3 space-y-2"><input value={entryUrls[competition.slug] ?? ""} onChange={(event) => setEntryUrls((values) => ({...values,[competition.slug]:event.target.value}))} placeholder="HTTPS-ссылка на TikTok" className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm outline-none focus:border-cyan-200/50" /><button disabled={!user || busy !== null} onClick={() => void submitEntry(competition.slug)} className="rounded-lg bg-cyan-200 px-3 py-2 text-xs font-bold text-slate-950 disabled:opacity-40">Отправить заявку</button></div>}</article>) : <p className="text-sm text-white/45">Конкурсы пока не опубликованы организатором.</p>}
             </div>
           </section>
 
