@@ -716,7 +716,15 @@ export default function Feed() {
     let acc = 0;
     let last = 0;
     const onWheel = (e: WheelEvent) => {
-      if (sheetRef.current) return;
+      const target = e.target as HTMLElement | null;
+      // Modal panels must handle their own scrolling instead of navigating the feed.
+      if (
+        sheetRef.current ||
+        accountOpen ||
+        commentsOpen ||
+        settingsOpen ||
+        target?.closest(".account-panel, .comments-panel, .settings-panel")
+      ) return;
       e.preventDefault();
       const now = Date.now();
       if (now - last > 200) acc = 0;
@@ -730,7 +738,7 @@ export default function Feed() {
       }
     };
     const onKey = (e: KeyboardEvent) => {
-      if (sheetRef.current) return;
+      if (sheetRef.current || accountOpen || commentsOpen || settingsOpen) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "TEXTAREA" || t.tagName === "INPUT")) return;
       unlock();
@@ -747,7 +755,7 @@ export default function Feed() {
       el.removeEventListener("wheel", onWheel);
       window.removeEventListener("keydown", onKey);
     };
-  }, [go, togglePlay, unlock]);
+  }, [go, togglePlay, unlock, accountOpen, commentsOpen, settingsOpen]);
 
   /* ---------- действия пользователя ---------- */
   const liked = !!current && store.likes.includes(current.id);
