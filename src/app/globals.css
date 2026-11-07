@@ -70,3 +70,31 @@ body {
 .feed-action-rail { filter:drop-shadow(0 8px 18px rgba(0,0,0,.25)); }
 .feed-caption { text-shadow:0 2px 8px rgba(0,0,0,.8); }
 @media (prefers-reduced-motion: reduce) { .feed-icon-button { transition:none; } }
+
+/* Mobile-first controls: preserve every action on narrow and short screens. */
+.mobile-bottom-nav { position:absolute; inset-inline:0; bottom:0; z-index:40; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:2px; padding:7px 8px max(7px,env(safe-area-inset-bottom)); border-top:1px solid rgba(255,255,255,.12); background:rgba(5,7,12,.88); backdrop-filter:blur(18px); }
+.mobile-bottom-nav button { display:flex; min-width:0; min-height:48px; flex-direction:column; align-items:center; justify-content:center; gap:2px; border-radius:12px; color:rgba(255,255,255,.72); touch-action:manipulation; }
+.mobile-bottom-nav button > span { font-size:21px; line-height:22px; }
+.mobile-bottom-nav button > small { font-size:10px; line-height:13px; white-space:nowrap; }
+.mobile-bottom-nav button.is-active { color:#25f4ee; background:rgba(37,244,238,.1); }
+.account-panel, .video-sheet { -webkit-overflow-scrolling:touch; overscroll-behavior:contain; }
+.account-panel input, .account-panel textarea, .video-sheet textarea, .comments-panel textarea { font-size:16px; }
+.account-panel button, .video-sheet button, .comments-panel button { min-height:44px; touch-action:manipulation; }
+.comments-panel { padding-bottom:max(0.75rem,env(safe-area-inset-bottom)); }
+@media (max-width: 639px) {
+  .feed-header { min-height:0; flex-wrap:wrap; row-gap:5px; padding-top:2px; padding-bottom:3px; }
+  .feed-header > .feed-logo { min-height:32px; max-width:132px; padding-inline:7px; font-size:13px; }
+  .feed-header > div { gap:5px; }
+  .feed-icon-button { min-width:40px; min-height:40px; padding:8px; }
+  .feed-action-rail { gap:9px !important; right:8px; bottom:calc(env(safe-area-inset-bottom) + 5.1rem); }
+  .feed-action-rail > button { width:46px; min-width:46px; min-height:46px; height:46px; padding:4px; border-radius:999px; gap:0; background:rgba(10,12,20,.68); border:1px solid rgba(255,255,255,.16); backdrop-filter:blur(12px); }
+  .feed-action-rail > button svg { width:27px; height:27px; }
+  .feed-action-rail > button > span:last-child { display:none; }
+  .feed-caption { padding-right:4.25rem; }
+}
+@media (max-width: 360px) {
+  .feed-header > .feed-logo { max-width:112px; font-size:12px; }
+  .feed-header > div { gap:3px; }
+  .feed-icon-button { min-width:36px; min-height:36px; padding:6px; }
+  .feed-action-rail > button { width:42px; min-width:42px; height:42px; min-height:42px; }
+}
