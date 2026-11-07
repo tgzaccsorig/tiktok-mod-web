@@ -26,8 +26,10 @@ async function mapLimit<T, R>(list: T[], limit: number, fn: (x: T) => Promise<R>
  * Ответ кэшируется на CDN (s-maxage) — повторные открытия сайта не ждут TikTok.
  */
 export async function GET() {
-  const urls = (catalog.videos as string[]).filter((u) => typeof u === "string" && u.trim());
-  const results = await mapLimit(urls, 10, async (url) => ({ url, r: await fetchOembed(url, { timeoutMs: 3500, retries: 0 }) }));
+  // Убираем дубли до сетевых запросов: один и тот же ролик не должен задерживать каталог.
+  const urls = Array.from(new Set((catalog.videos as string[]).filter((u) => typeof u === "string" && u.trim())));
+  // Проверяем больше ссылок параллельно и быстро отсекаем зависшие ответы TikTok.
+  const results = await mapLimit(urls, 20, async (url) => ({ url, r: await fetchOembed(url, { timeoutMs: 2500, retries: 0 }) }));
 
   const seen = new Set<string>();
   const items: VideoItem[] = [];
