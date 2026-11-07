@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
+import { useStore } from "@/hooks/useStore";
 import { CATEGORIES, type VideoItem } from "@/lib/types";
 
 type ProfileResult = { id: string; username: string; display_name: string | null; avatar_url: string | null };
@@ -22,6 +23,7 @@ export default function SearchPage() {
   const [error, setError] = useState("");
   const [searched, setSearched] = useState(false);
   const supabase = useMemo(() => getSupabase(), []);
+  const [store] = useStore();
 
   useEffect(() => {
     let active = true;
@@ -109,7 +111,7 @@ export default function SearchPage() {
   }, [query, runSearch]);
 
   return (
-    <main className="min-h-dvh overflow-y-auto bg-[#090b12] px-4 pb-12 pt-6 text-white sm:px-6">
+    <main data-theme={store.settings.theme} className="search-page min-h-dvh overflow-y-auto bg-[#090b12] px-4 pb-12 pt-6 text-white sm:px-6">
       <div className="mx-auto max-w-3xl">
         <Link href="/" className="inline-flex rounded-full border border-white/15 px-4 py-2 text-sm text-white/75 hover:bg-white/10">← Назад в ленту</Link>
         <header className="mb-6 mt-7">
