@@ -9,7 +9,7 @@ type CommentRow = {
   user_id: string;
   content: string;
   created_at: string;
-  profiles: { username: string; display_name: string | null } | null;
+  profile: { username: string; display_name: string | null } | null;
 };
 
 export default function CommentsPanel({
@@ -40,15 +40,21 @@ export default function CommentsPanel({
     }
     setLoading(true);
     setError("");
-    const { data, error: queryError } = await supabase
-      .from("comments")
-      .select("id,user_id,content,created_at,profiles(username,display_name)")
-      .eq("video_id", video.id)
-      .order("created_at", { ascending: false })
-      .limit(100);
-    if (queryError) setError("Не удалось загрузить комментарии.");
-    else setComments((data ?? []) as unknown as CommentRow[]);
-    setLoading(false);
+    try {
+      const { data, error: queryError } = await supabase
+        .from("comments")
+        .select("id,user_id,content,created_at,profile:profiles!comments_user_id_fkey(username,display_name)")
+        .eq("video_id", video.id)
+        .order("created_at", { ascending: false })
+        .limit(100);
+      if (queryError) throw queryError;
+      setComments((data ?? []) as unknown as CommentRow[]);
+    } catch {
+      setComments([]);
+      setError("Не удалось загрузить комментарии. Проверь подключение и попробуй ещё раз.");
+    } finally {
+      setLoading(false);
+    }
   }, [video?.id]);
 
   useEffect(() => {
@@ -121,7 +127,7 @@ export default function CommentsPanel({
           {comments.map((comment) => (
             <article key={comment.id} className="rounded-xl bg-white/[0.05] p-3">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-xs font-semibold text-cyan-200">{comment.profiles?.display_name || comment.profiles?.username || "Пользователь"}</p>
+                <p className="text-xs font-semibold text-cyan-200">{comment.profile?.display_name || comment.profile?.username || "Пользователь"}</p>
                 {user?.id === comment.user_id && <button onClick={() => void remove(comment.id)} className="text-xs text-white/40 hover:text-red-300">Удалить</button>}
               </div>
               <p className="mt-1 whitespace-pre-wrap break-words text-sm text-white/90">{comment.content}</p>
