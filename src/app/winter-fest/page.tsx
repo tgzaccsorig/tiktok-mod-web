@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabase";
+import { useStore } from "@/hooks/useStore";
 
 const EVENT_START = new Date("2026-12-20T00:00:00+02:00");
 type Reward = { day: string; reward_coins: number; reward_title: string; icon: string; active: boolean };
@@ -42,6 +43,7 @@ function errorMessage(error: unknown) {
 
 export default function WinterFestPage() {
   const supabase = useMemo(() => getSupabase(), []);
+  const [store] = useStore();
   const [now, setNow] = useState(() => new Date());
   const [user, setUser] = useState<User | null>(null);
   const [balance, setBalance] = useState(0);
@@ -175,7 +177,7 @@ export default function WinterFestPage() {
   const rarityLabel: Record<string, string> = { common: "Обычный", rare: "Редкий", epic: "Эпический", legendary: "Легендарный" };
 
   return (
-    <main className="min-h-dvh overflow-y-auto bg-[#07101b] px-4 py-7 text-white sm:px-6">
+    <main data-theme={store.settings.theme} className="winter-page min-h-dvh overflow-y-auto bg-[#07101b] px-4 py-7 text-white sm:px-6">
       <div className="mx-auto max-w-5xl">
         <Link href="/" className="inline-flex rounded-full border border-white/15 px-4 py-2 text-sm text-white/75 hover:bg-white/10">← Назад в TikTok Mod Web</Link>
         <header className="relative mt-7 overflow-hidden rounded-[2rem] border border-cyan-100/15 bg-gradient-to-br from-[#102b40] via-[#123c4a] to-[#261e45] p-6 shadow-2xl sm:p-10">
