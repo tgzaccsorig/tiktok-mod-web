@@ -150,3 +150,33 @@ body {
 }
 
 .admin-input{width:100%;min-width:0;border:1px solid rgba(255,255,255,.13);border-radius:10px;background:rgba(0,0,0,.25);padding:10px 12px;color:white;font-size:13px;outline:none}.admin-input:focus{border-color:rgba(103,232,249,.6)}.admin-input option{background:#101722;color:white}
+
+/* Shared theme support for search, public profiles and Winter Fest pages. */
+[data-theme="light"].search-page,
+[data-theme="light"].public-user-page,
+[data-theme="light"].winter-page,
+[data-theme="light"].winter-admin-page { background:#f4f6fa !important; color:#171923 !important; }
+[data-theme="light"] .search-page :is(h1,h2,h3,b,strong),
+[data-theme="light"] .public-user-page :is(h1,h2,h3,b,strong),
+[data-theme="light"] .winter-admin-page :is(h1,h2,h3,b,strong) { color:#171923 !important; }
+[data-theme="light"] .search-page :is(p,span,small),
+[data-theme="light"] .public-user-page :is(p,span,small),
+[data-theme="light"] .winter-admin-page :is(p,span,small) { color:#596273 !important; }
+[data-theme="light"] .search-page article,
+[data-theme="light"] .search-page a.rounded-2xl,
+[data-theme="light"] .public-user-page header,
+[data-theme="light"] .public-user-page article,
+[data-theme="light"] .winter-admin-page section,
+[data-theme="light"] .winter-admin-page article { background:#fff !important; border-color:rgba(25,35,50,.12) !important; }
+[data-theme="light"] .search-page input,
+[data-theme="light"] .winter-page input,
+[data-theme="light"] .winter-admin-page input,
+[data-theme="light"] .winter-admin-page select { background:#fff !important; color:#171923 !important; border-color:rgba(25,35,50,.18) !important; }
+[data-theme="light"] .search-page input::placeholder,
+[data-theme="light"] .winter-page input::placeholder,
+[data-theme="light"] .winter-admin-page input::placeholder { color:#7a8495 !important; }
+[data-theme="light"] .winter-page > div > section:not(:first-of-type),
+[data-theme="light"] .winter-admin-page section { color:#171923; }
+[data-theme="light"] .winter-page > div > section:not(:first-of-type) :is(h2,h3,b) { color:#171923 !important; }
+[data-theme="light"] .winter-page > div > section:not(:first-of-type) :is(p,span,label) { color:#596273 !important; }
+[data-theme="light"] .winter-page > div > section:not(:first-of-type) article { background:#fff !important; border-color:rgba(25,35,50,.12) !important; }
