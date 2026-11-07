@@ -13,6 +13,7 @@ type Quest = { slug: string; title: string; description: string; cadence: string
 type Progress = { quest_slug: string; cycle_key: string; progress: number; completed_at: string | null; claimed_at: string | null };
 type Competition = { slug: string; title: string; description: string; status: string; starts_at: string; ends_at: string | null; winner_user_id: string | null };
 type Entry = { id: string; competition_slug: string; user_id: string; video_url: string; created_at: string; profile?: { username: string; display_name: string | null } | null };
+type ClickerState = { level: number; clicks_total: number; earned_total: number; click_power: number; next_upgrade_cost: number | null };
 
 function helsinkiDate(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Helsinki", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
@@ -38,6 +39,8 @@ function errorMessage(error: unknown) {
   if (message.includes("insufficient_balance")) return "Не хватает SnowCoins.";
   if (message.includes("already_owned")) return "Этот предмет уже есть в инвентаре.";
   if (message.includes("quest_not_ready")) return "Задание ещё не выполнено или награда уже получена.";
+  if (message.includes("click_too_fast")) return "Не так быстро! Кликни ещё раз через мгновение.";
+  if (message.includes("clicker_max_level")) return "Кликер уже прокачан до максимального уровня.";
   return "Не удалось выполнить действие. Попробуй ещё раз.";
 }
 
@@ -47,6 +50,7 @@ export default function WinterFestPage() {
   const [now, setNow] = useState(() => new Date());
   const [user, setUser] = useState<User | null>(null);
   const [balance, setBalance] = useState(0);
+  const [clicker, setClicker] = useState<ClickerState>({level:1,clicks_total:0,earned_total:0,click_power:1,next_upgrade_cost:100});
   const [eventSettings, setEventSettings] = useState({test_mode:false,test_date:"2026-12-20"});
   const [rewards, setRewards] = useState<Reward[]>([]);
   const [claims, setClaims] = useState<string[]>([]);
@@ -109,17 +113,19 @@ export default function WinterFestPage() {
         setBalance(0); setClaims([]); setOwned([]); setEquipped({}); setProgress([]); setLedger([]);
         return;
       }
-      const [wallet, userClaims, inventory, worn, questProgress, history] = await Promise.all([
+      const [wallet, userClaims, inventory, worn, questProgress, history, clickerState] = await Promise.all([
         supabase.from("winter_wallets").select("balance").eq("user_id", currentUser.id).maybeSingle(),
         supabase.from("winter_advent_claims").select("day").eq("user_id", currentUser.id),
         supabase.from("winter_inventory").select("item_slug").eq("user_id", currentUser.id),
         supabase.from("winter_equipped_items").select("slot,item_slug").eq("user_id", currentUser.id),
         supabase.from("winter_quest_progress").select("quest_slug,cycle_key,progress,completed_at,claimed_at").eq("user_id", currentUser.id),
         supabase.from("winter_coin_ledger").select("amount,reason,created_at").eq("user_id", currentUser.id).order("created_at", { ascending: false }).limit(12),
+        supabase.rpc("winter_clicker_state"),
       ]);
-      const privateError = [wallet,userClaims,inventory,worn,questProgress,history].find((result) => result.error)?.error;
+      const privateError = [wallet,userClaims,inventory,worn,questProgress,history,clickerState].find((result) => result.error)?.error;
       if (privateError) throw privateError;
       setBalance(wallet.data?.balance ?? 0);
+      setClicker(clickerState.data as ClickerState);
       setClaims((userClaims.data ?? []).map((row) => row.day));
       setOwned((inventory.data ?? []).map((row) => row.item_slug));
       setEquipped(Object.fromEntries((worn.data ?? []).map((row) => [row.slot, row.item_slug])));
@@ -172,6 +178,33 @@ export default function WinterFestPage() {
     if (rpcError) throw rpcError;
   }, "Награда за задание получена!");
 
+  const clickSnowCoin = async () => {
+    if (!supabase || !user || busy) { if (!user) setError("Войди в аккаунт, чтобы собирать SnowCoins."); return; }
+    setBusy("clicker"); setError(""); setMessage("");
+    try {
+      const {data,error:rpcError} = await supabase.rpc("winter_clicker_click");
+      if (rpcError) throw rpcError;
+      const result = data as ClickerState & {balance:number;reward:number};
+      setBalance(result.balance);
+      setClicker(result);
+    } catch (e) { setError(errorMessage(e)); }
+    finally { setBusy(null); }
+  };
+
+  const upgradeClicker = async () => {
+    if (!supabase || !user || busy) { if (!user) setError("Войди в аккаунт, чтобы прокачать кликер."); return; }
+    setBusy("clicker-upgrade"); setError(""); setMessage("");
+    try {
+      const {data,error:rpcError} = await supabase.rpc("winter_clicker_upgrade");
+      if (rpcError) throw rpcError;
+      const result = data as ClickerState & {balance:number};
+      setBalance(result.balance);
+      setClicker(result);
+      setMessage("Кликер прокачан! Теперь каждый клик приносит больше SnowCoins.");
+    } catch (e) { setError(errorMessage(e)); }
+    finally { setBusy(null); }
+  };
+
   const submitEntry = async (slug: string) => {
     if (!supabase || !user) { setError("Войди в аккаунт, чтобы участвовать."); return; }
     const url = (entryUrls[slug] ?? "").trim();
@@ -217,8 +250,22 @@ export default function WinterFestPage() {
           {message && <p role="status" className="mt-4 rounded-xl border border-emerald-300/20 bg-emerald-300/5 p-3 text-sm text-emerald-100">{message}</p>}
           {loading && <p className="mt-4 text-sm text-cyan-100/70">Загружаю Winter Fest…</p>}
 
+          <section className="mt-8 overflow-hidden rounded-[2rem] border border-cyan-200/20 bg-gradient-to-br from-[#123b4a] via-[#142c48] to-[#30214b] p-5 shadow-xl sm:p-7">
+            <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[0.25em] text-cyan-200/75">01 · Snow Clicker</p><h2 className="mt-1 text-2xl font-black sm:text-3xl">Лови SnowCoins!</h2><p className="mt-1 max-w-lg text-sm text-white/60">Нажимай на снежный кристалл, собирай монетки и улучшай силу каждого клика.</p></div><div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-right"><p className="text-[10px] uppercase tracking-widest text-white/45">Сила клика</p><p className="text-2xl font-black text-cyan-100">+{clicker.click_power} SC</p></div></div>
+            <div className="mt-5 grid gap-4 sm:grid-cols-[1fr_1fr]">
+              <div className="flex flex-col items-center justify-center rounded-2xl border border-white/10 bg-black/15 p-4">
+                <button type="button" onClick={() => void clickSnowCoin()} disabled={!user || busy !== null} aria-label="Собрать SnowCoins" className="group grid h-36 w-36 place-items-center rounded-full border-4 border-cyan-100/40 bg-gradient-to-br from-cyan-100/35 via-sky-300/20 to-indigo-300/30 text-6xl shadow-[0_0_55px_rgba(103,232,249,0.22)] transition hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 sm:h-44 sm:w-44 sm:text-7xl">❄️</button>
+                <p className="mt-3 text-sm font-bold text-cyan-100">{busy === "clicker" ? "Собираем..." : user ? `+${clicker.click_power} SnowCoins за нажатие` : "Войди, чтобы играть"}</p>
+              </div>
+              <div className="grid content-center gap-3">
+                <div className="grid grid-cols-2 gap-2"><div className="rounded-xl bg-black/20 p-3"><p className="text-[10px] text-white/45">Всего кликов</p><p className="mt-1 text-xl font-black tabular-nums">{clicker.clicks_total.toLocaleString("ru-RU")}</p></div><div className="rounded-xl bg-black/20 p-3"><p className="text-[10px] text-white/45">Заработано в кликере</p><p className="mt-1 text-xl font-black tabular-nums">{clicker.earned_total.toLocaleString("ru-RU")} SC</p></div></div>
+                <div className="rounded-xl border border-white/10 bg-black/20 p-4"><div className="flex items-center justify-between gap-2"><b>Улучшение клика</b><span className="text-xs text-cyan-100">Уровень {clicker.level}/20</span></div><p className="mt-2 text-xs leading-5 text-white/55">Каждый уровень добавляет +1 SnowCoin за нажатие. Чем выше уровень, тем дороже следующее улучшение.</p><button type="button" onClick={() => void upgradeClicker()} disabled={!user || busy !== null || clicker.next_upgrade_cost === null || balance < (clicker.next_upgrade_cost ?? 0)} className="mt-3 w-full rounded-xl bg-cyan-200 px-4 py-3 text-sm font-black text-slate-950 disabled:opacity-40">{clicker.next_upgrade_cost === null ? "Максимальный уровень" : `Улучшить · ${clicker.next_upgrade_cost} SC`}</button></div>
+              </div>
+            </div>
+          </section>
+
           <section className="mt-8">
-            <div className="mb-4"><p className="text-xs font-bold uppercase tracking-[0.25em] text-cyan-200/65">01 · Advent</p><h2 className="mt-1 text-2xl font-extrabold">Адвент-календарь</h2><p className="mt-1 text-sm text-white/45">Один подарок на каждый день. Будущие даты закрыты, повторно забрать награду нельзя.</p></div>
+            <div className="mb-4"><p className="text-xs font-bold uppercase tracking-[0.25em] text-cyan-200/65">02 · Advent</p><h2 className="mt-1 text-2xl font-extrabold">Адвент-календарь</h2><p className="mt-1 text-sm text-white/45">Один подарок на каждый день. Будущие даты закрыты, повторно забрать награду нельзя.</p></div>
             <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 md:grid-cols-8">
               {rewards.map((reward) => {
                 const claimed = claims.includes(reward.day);
@@ -235,7 +282,7 @@ export default function WinterFestPage() {
           </section>
 
           <section className="mt-9">
-            <p className="text-xs font-bold uppercase tracking-[0.25em] text-cyan-200/65">02 · Quests</p><h2 className="mt-1 text-2xl font-extrabold">Праздничные задания</h2>
+            <p className="text-xs font-bold uppercase tracking-[0.25em] text-cyan-200/65">03 · Quests</p><h2 className="mt-1 text-2xl font-extrabold">Праздничные задания</h2>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               {quests.map((quest) => {
                 const row = progressFor(quest);
@@ -254,7 +301,7 @@ export default function WinterFestPage() {
           </section>
 
           <section className="mt-9">
-            <p className="text-xs font-bold uppercase tracking-[0.25em] text-cyan-200/65">03 · Shop</p><h2 className="mt-1 text-2xl font-extrabold">Магазин украшений</h2>
+            <p className="text-xs font-bold uppercase tracking-[0.25em] text-cyan-200/65">04 · Shop</p><h2 className="mt-1 text-2xl font-extrabold">Магазин украшений</h2>
             <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {items.map((item) => {
                 const isOwned = owned.includes(item.slug);
@@ -271,7 +318,7 @@ export default function WinterFestPage() {
           </section>
 
           <section className="mt-9">
-            <p className="text-xs font-bold uppercase tracking-[0.25em] text-cyan-200/65">04 · Competitions</p><h2 className="mt-1 text-2xl font-extrabold">Новогодние конкурсы</h2>
+            <p className="text-xs font-bold uppercase tracking-[0.25em] text-cyan-200/65">05 · Competitions</p><h2 className="mt-1 text-2xl font-extrabold">Новогодние конкурсы</h2>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               {competitions.length ? competitions.map((competition) => <article key={competition.slug} className="rounded-2xl border border-white/10 bg-white/[0.04] p-4"><h3 className="font-bold">{competition.title}</h3><p className="mt-2 text-sm text-white/50">{competition.description}</p><p className="mt-3 text-xs text-cyan-100/60">Статус: {competition.status}</p>{competition.winner_user_id && <p className="mt-2 text-xs text-emerald-200">Победитель определён организатором.</p>}<div className="mt-3 border-t border-white/10 pt-3"><p className="text-xs font-semibold text-white/60">Участники: {entries.filter((entry) => entry.competition_slug === competition.slug).length}</p>{entries.filter((entry) => entry.competition_slug === competition.slug).slice(0,8).map((entry) => <div key={entry.id} className="mt-2 flex items-center justify-between gap-2 text-xs"><span className="truncate text-white/55">@{entry.profile?.username ?? "участник"}</span><a href={entry.video_url} target="_blank" rel="noopener noreferrer" className="shrink-0 text-cyan-200 underline">Видео ↗</a></div>)}</div>{competition.status === "open" && <div className="mt-3 space-y-2"><input value={entryUrls[competition.slug] ?? ""} onChange={(event) => setEntryUrls((values) => ({...values,[competition.slug]:event.target.value}))} placeholder="HTTPS-ссылка на TikTok" className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm outline-none focus:border-cyan-200/50" /><button disabled={!user || busy !== null} onClick={() => void submitEntry(competition.slug)} className="rounded-lg bg-cyan-200 px-3 py-2 text-xs font-bold text-slate-950 disabled:opacity-40">Отправить заявку</button></div>}</article>) : <p className="text-sm text-white/45">Конкурсы пока не опубликованы организатором.</p>}
             </div>
@@ -279,7 +326,7 @@ export default function WinterFestPage() {
 
           <section className="mt-9 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
             <h2 className="font-bold">История SnowCoins</h2>
-            {ledger.length ? <ul className="mt-3 space-y-2">{ledger.map((row,index) => <li key={`${row.created_at}:${index}`} className="flex items-center justify-between gap-3 text-sm"><span className="text-white/55">{row.reason === "advent" ? "Адвент-календарь" : row.reason === "purchase" ? "Покупка" : "Задание"} · {new Date(row.created_at).toLocaleDateString("ru-RU")}</span><b className={row.amount > 0 ? "text-emerald-200" : "text-rose-200"}>{row.amount > 0 ? "+" : ""}{row.amount} SC</b></li>)}</ul> : <p className="mt-2 text-sm text-white/40">Операций пока нет.</p>}
+            {ledger.length ? <ul className="mt-3 space-y-2">{ledger.map((row,index) => <li key={`${row.created_at}:${index}`} className="flex items-center justify-between gap-3 text-sm"><span className="text-white/55">{row.reason === "advent" ? "Адвент-календарь" : row.reason === "purchase" ? "Покупка" : row.reason === "clicker" ? "Кликер SnowCoins" : row.reason === "clicker_upgrade" ? "Улучшение кликера" : row.reason === "admin_grant" ? "Начисление администратора" : "Задание"} · {new Date(row.created_at).toLocaleDateString("ru-RU")}</span><b className={row.amount > 0 ? "text-emerald-200" : "text-rose-200"}>{row.amount > 0 ? "+" : ""}{row.amount} SC</b></li>)}</ul> : <p className="mt-2 text-sm text-white/40">Операций пока нет.</p>}
           </section>
           {!user && <p className="mt-6 rounded-xl border border-cyan-100/15 bg-cyan-100/5 p-4 text-sm text-cyan-50/75">Чтобы получать SnowCoins, покупать украшения и открывать награды, войди в аккаунт на главной странице.</p>}
         </>}
