@@ -103,6 +103,7 @@ export default function Feed() {
   const priorityRef = useRef<string[]>([]);
   const accountOwnerRef = useRef<string | null>(null);
   const reloadCountRef = useRef<Record<string, number>>({});
+  const socialPendingRef = useRef(new Set<string>());
   // Параметры iframe фиксируются, пока плеер смонтирован: смена src перезагрузила бы его.
   const srcOpts = useRef(new Map<string, { muted: boolean; loop: boolean }>());
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -761,28 +762,68 @@ export default function Feed() {
   const toggleIn = (field: "likes" | "favs") => {
     if (!current) return;
     const id = current.id;
+    const ownerId = accountUser?.id ?? null;
+    const pendingKey = `${ownerId ?? "guest"}:${field}:${id}`;
+    if (socialPendingRef.current.has(pendingKey)) return;
+
     const wasActive = store[field].includes(id);
+    const nextActive = !wasActive;
+    // Гостевые отметки остаются локальными. Для аккаунта синхронизируемся с БД.
+    if (!ownerId) {
+      update((s) => ({
+        ...s,
+        [field]: nextActive ? Array.from(new Set([...s[field], id])) : s[field].filter((x) => x !== id),
+      }));
+      return;
+    }
+
+    const supabase = getSupabase();
+    if (!supabase) {
+      showToast("Не удалось подключиться к сохранению. Попробуй позже.");
+      return;
+    }
+
+    socialPendingRef.current.add(pendingKey);
+    // Быстрый отклик интерфейса; при ошибке возвращаем прежнее состояние.
     update((s) => ({
       ...s,
-      [field]: s[field].includes(id) ? s[field].filter((x) => x !== id) : [...s[field], id],
+      [field]: nextActive ? Array.from(new Set([...s[field], id])) : s[field].filter((x) => x !== id),
     }));
-    const supabase = getSupabase();
-    if (accountUser && supabase) {
-      const table = field === "likes" ? "likes" : "favorites";
-      void (async () => {
-        const result = wasActive
-          ? await supabase.from(table).delete().eq("user_id", accountUser.id).eq("video_id", id)
-          : await supabase.from(table).upsert({ user_id: accountUser.id, video_id: id }, { onConflict: "user_id,video_id" });
-        if (!result.error && !wasActive && field === "likes" && current.ownerId && current.ownerId !== accountUser.id) {
+
+    void (async () => {
+      try {
+        const { data: authData, error: authError } = await supabase.auth.getUser();
+        if (authError) throw authError;
+        if (!authData.user || authData.user.id !== ownerId) {
+          throw new Error("Сессия аккаунта изменилась. Войди снова.");
+        }
+
+        const table = field === "likes" ? "likes" : "favorites";
+        const result = nextActive
+          ? await supabase.from(table).insert({ user_id: ownerId, video_id: id })
+          : await supabase.from(table).delete().eq("user_id", ownerId).eq("video_id", id);
+
+        // Если локальный кэш отстал от БД, повторный insert означает, что запись уже есть.
+        if (result.error && !(nextActive && result.error.code === "23505")) throw result.error;
+
+        if (nextActive && field === "likes" && current.ownerId && current.ownerId !== ownerId) {
           await supabase.from("notifications").insert({
             user_id: current.ownerId,
-            actor_id: accountUser.id,
+            actor_id: ownerId,
             type: "like",
             video_id: id,
           });
         }
-      })();
-    }
+      } catch (error) {
+        update((s) => ({
+          ...s,
+          [field]: wasActive ? Array.from(new Set([...s[field], id])) : s[field].filter((x) => x !== id),
+        }));
+        showToast(field === "likes" ? "Не удалось сохранить лайк" : "Не удалось сохранить избранное");
+      } finally {
+        socialPendingRef.current.delete(pendingKey);
+      }
+    })();
   };
 
   const markNotInterested = () => {
