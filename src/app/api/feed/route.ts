@@ -27,7 +27,7 @@ async function mapLimit<T, R>(list: T[], limit: number, fn: (x: T) => Promise<R>
  */
 export async function GET() {
   const urls = (catalog.videos as string[]).filter((u) => typeof u === "string" && u.trim());
-  const results = await mapLimit(urls, 10, async (url) => ({ url, r: await fetchOembed(url) }));
+  const results = await mapLimit(urls, 10, async (url) => ({ url, r: await fetchOembed(url, { timeoutMs: 3500, retries: 0 }) }));
 
   const seen = new Set<string>();
   const items: VideoItem[] = [];
