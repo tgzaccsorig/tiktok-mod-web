@@ -50,5 +50,5 @@ export type Store = {
   notInterested: string[];
   custom: string[];
   category: FeedMode;
-  settings: { sound: boolean; autoNext: boolean };
+  settings: { sound: boolean; autoNext: boolean; theme: "dark" | "light" };
 };
