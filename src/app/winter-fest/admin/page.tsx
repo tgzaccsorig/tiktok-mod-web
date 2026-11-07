@@ -19,6 +19,8 @@ export default function WinterFestAdminPage() {
   const [rewards, setRewards] = useState<any[]>([]);
   const [entries, setEntries] = useState<any[]>([]);
   const [eventSettings, setEventSettings] = useState({test_mode:false,test_date:"2026-12-20"});
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [coinAmount, setCoinAmount] = useState("100");
   const [winner, setWinner] = useState<Record<string,string>>({});
   const [item, setItem] = useState({slug:"",name:"",description:"",icon:"❄️",rarity:"common",slot:"frame",price:"50"});
   const [quest, setQuest] = useState({slug:"",title:"",description:"",action_key:"like",cadence:"daily",goal:"1",reward_coins:"10",starts_on:"2026-12-20"});
@@ -36,7 +38,8 @@ export default function WinterFestAdminPage() {
       supabase.from("winter_competitions").select("*").order("starts_at"),
       supabase.from("winter_advent_rewards").select("*").order("day"),
       supabase.from("winter_competition_entries").select("id,competition_slug,user_id,video_url,profile:profiles!winter_competition_entries_user_id_fkey(username)").order("created_at",{ascending:false}),
-      supabase.from("winter_event_settings").select("test_mode,test_date").eq("id",true).single()
+      supabase.from("winter_event_settings").select("test_mode,test_date").eq("id",true).single(),
+      supabase.from("winter_wallets").select("balance").eq("user_id",auth.user!.id).maybeSingle()
     ]);
     const failed = results.find((result)=>result.error)?.error;
     if (failed) setError(failed.message);
@@ -47,6 +50,7 @@ export default function WinterFestAdminPage() {
       setRewards(results[3].data ?? []);
       setEntries(results[4].data ?? []);
       setEventSettings({test_mode:results[5].data?.test_mode ?? false,test_date:results[5].data?.test_date ?? "2026-12-20"});
+      setWalletBalance(results[6].data?.balance ?? 0);
     }
     setLoading(false);
   },[supabase]);
@@ -64,6 +68,7 @@ export default function WinterFestAdminPage() {
   const createQuest=()=>save(()=>supabase!.from("winter_quests").insert({...quest,goal:Number(quest.goal),reward_coins:Number(quest.reward_coins),active:true}),"Задание добавлено.");
   const createCompetition=()=>save(()=>supabase!.from("winter_competitions").insert({...competition,starts_at:new Date(competition.starts_at).toISOString()}),"Конкурс создан.");
   const saveEventSettings=()=>save(()=>supabase!.from("winter_event_settings").update({test_mode:eventSettings.test_mode,test_date:eventSettings.test_date,updated_at:new Date().toISOString()}).eq("id",true),"Настройки тестового режима сохранены.");
+  const grantCoins=()=>save(()=>supabase!.rpc("winter_admin_grant_coins",{p_amount:Number(coinAmount)}),"SnowCoins начислены на твой аккаунт.");
   const updateReward=(day:string,value:number)=>save(()=>supabase!.from("winter_advent_rewards").update({reward_coins:value}).eq("day",day),"Награда календаря обновлена.");
   const updateItem=(slug:string,changes:Record<string,unknown>)=>save(()=>supabase!.from("winter_shop_items").update(changes).eq("slug",slug),"Предмет обновлён.");
   const updateQuest=(slug:string,changes:Record<string,unknown>)=>save(()=>supabase!.from("winter_quests").update(changes).eq("slug",slug),"Задание обновлено.");
@@ -86,6 +91,7 @@ export default function WinterFestAdminPage() {
           <p className="mt-2 text-xs text-white/45">Для проверки всех функций поставь 24 декабря 2026 года. В тесте будут работать реальные записи твоего аккаунта в базе, поэтому тестовые SnowCoins и покупки будут сохранены.</p>
           <button disabled={saving} onClick={()=>void saveEventSettings()} className="mt-4 rounded-xl bg-amber-200 px-4 py-3 text-sm font-bold text-slate-950 disabled:opacity-40">Сохранить настройки теста</button>
         </section>}
+        {admin && <section className="mt-5 rounded-2xl border border-cyan-200/20 bg-cyan-200/[0.05] p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-widest text-cyan-200">Администратор</p><h2 className="mt-1 text-xl font-bold">SnowCoins</h2><p className="mt-1 text-sm text-white/55">Начисление только на твой аккаунт tgzaccs.</p></div><p className="text-2xl font-black tabular-nums">{walletBalance} SC</p></div><div className="mt-4 grid grid-cols-[minmax(0,1fr)_auto] gap-2"><input aria-label="Количество SnowCoins" type="number" min="1" max="100000" step="1" value={coinAmount} onChange={e=>setCoinAmount(e.target.value)} className="admin-input"/><button disabled={saving||!Number.isInteger(Number(coinAmount))||Number(coinAmount)<1||Number(coinAmount)>100000} onClick={()=>void grantCoins()} className="rounded-xl bg-cyan-200 px-4 py-3 text-sm font-bold text-slate-950 disabled:opacity-40">Начислить</button></div><p className="mt-2 text-xs text-white/40">От 1 до 100 000 SC за одно начисление. Каждая операция попадёт в историю баланса.</p></section>}
         {loading ? <p className="mt-6 text-sm text-white/50">Проверяю права доступа…</p> : !admin ? <section className="mt-6 rounded-2xl border border-amber-200/20 bg-amber-200/5 p-5"><h2 className="font-bold">Нет доступа</h2><p className="mt-2 text-sm text-white/60">Обычные данные профиля не дают административных прав. Нужна роль admin в app_metadata.</p></section> : <>
           <div className="mt-8 grid gap-5 lg:grid-cols-2">
             <section className="rounded-2xl border border-white/10 bg-white/[0.04] p-5"><h2 className="text-xl font-bold">Магазин: новый предмет</h2><div className="mt-4 grid gap-3">
