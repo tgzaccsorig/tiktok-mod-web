@@ -106,7 +106,7 @@ export default function CommentsPanel({
 
   return (
     <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/70 sm:items-center" onPointerDown={(e) => e.stopPropagation()}>
-      <section role="dialog" aria-modal="true" aria-label="Комментарии" className="flex max-h-[82dvh] w-full max-w-xl flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-[#11131b] shadow-2xl sm:rounded-3xl">
+      <section role="dialog" aria-modal="true" aria-label="Комментарии" className="comments-panel flex max-h-[88dvh] w-full max-w-xl flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-[#11131b] shadow-2xl sm:rounded-3xl">
         <header className="flex items-center justify-between border-b border-white/10 px-4 py-4">
           <div>
             <h2 className="font-bold text-white">Комментарии</h2>
