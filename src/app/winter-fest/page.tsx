@@ -13,7 +13,8 @@ type Quest = { slug: string; title: string; description: string; cadence: string
 type Progress = { quest_slug: string; cycle_key: string; progress: number; completed_at: string | null; claimed_at: string | null };
 type Competition = { slug: string; title: string; description: string; status: string; starts_at: string; ends_at: string | null; winner_user_id: string | null };
 type Entry = { id: string; competition_slug: string; user_id: string; video_url: string; created_at: string; profile?: { username: string; display_name: string | null } | null };
-type ClickerState = { level: number; clicks_total: number; earned_total: number; click_power: number; next_upgrade_cost: number | null };
+type ClickerUpgrade = { upgrade_key:string; title:string; description:string; icon:string; base_cost:number; power_per_level:number; level:number; next_cost:number|null };
+type ClickerState = { level: number; clicks_total: number; earned_total: number; click_power: number; next_upgrade_cost: number | null; upgrades?: ClickerUpgrade[] };
 const WINTER_QUIZ = [{q:"Как называется северное сияние?",a:["Аврора","Комета","Метель"],correct:0},{q:"Какое дерево украшают на Новый год?",a:["Берёза","Ель","Клён"],correct:1},{q:"Из чего лепят снеговика?",a:["Из песка","Из снега","Из листьев"],correct:1}];
 
 function helsinkiDate(date = new Date()) {
@@ -51,7 +52,7 @@ export default function WinterFestPage() {
   const [now, setNow] = useState(() => new Date());
   const [user, setUser] = useState<User | null>(null);
   const [balance, setBalance] = useState(0);
-  const [clicker, setClicker] = useState<ClickerState>({level:1,clicks_total:0,earned_total:0,click_power:1,next_upgrade_cost:100});
+  const [clicker, setClicker] = useState<ClickerState>({level:1,clicks_total:0,earned_total:0,click_power:1,next_upgrade_cost:null,upgrades:[]});
   const [memoryDeck,setMemoryDeck]=useState(()=>["❄️","🎄","🎁","⛄","🎄","❄️","🐧","🎁","🐧","⛄"].sort(()=>Math.random()-.5));
   const [memoryPicks,setMemoryPicks]=useState<number[]>([]);
   const [memoryMatches,setMemoryMatches]=useState<number[]>([]);
@@ -119,7 +120,7 @@ export default function WinterFestPage() {
       setEntries((publicResults[4].data ?? []) as unknown as Entry[]);
       if (!currentUser) {
         setBalance(0); setClaims([]); setOwned([]); setEquipped({}); setProgress([]); setLedger([]);
-        setClicker({level:1,clicks_total:0,earned_total:0,click_power:1,next_upgrade_cost:100});
+        setClicker({level:1,clicks_total:0,earned_total:0,click_power:1,next_upgrade_cost:null,upgrades:[]});
         return;
       }
       const [wallet, userClaims, inventory, worn, questProgress, history, clickerState] = await Promise.all([
@@ -200,16 +201,18 @@ export default function WinterFestPage() {
     finally { setBusy(null); }
   };
 
-  const upgradeClicker = async () => {
+  const upgradeClicker = async (upgradeKey:string) => {
     if (!supabase || !user || busy) { if (!user) setError("Войди в аккаунт, чтобы прокачать кликер."); return; }
     setBusy("clicker-upgrade"); setError(""); setMessage("");
     try {
-      const {data,error:rpcError} = await supabase.rpc("winter_clicker_upgrade");
+      const {data,error:rpcError} = await supabase.rpc("winter_clicker_upgrade",{p_upgrade_key:upgradeKey});
       if (rpcError) throw rpcError;
-      const result = data as ClickerState & {balance:number};
+      const result = data as {balance:number};
       setBalance(result.balance);
-      setClicker(result);
-      setMessage("Кликер прокачан! Теперь каждый клик приносит больше SnowCoins.");
+      const {data:state,error:stateError}=await supabase.rpc("winter_clicker_state");
+      if(stateError) throw stateError;
+      setClicker(state as ClickerState);
+      setMessage("Улучшение установлено! Сила сбора выросла.");
     } catch (e) { setError(errorMessage(e)); }
     finally { setBusy(null); }
   };
@@ -273,7 +276,7 @@ export default function WinterFestPage() {
               </div>
               <div className="grid content-center gap-3">
                 <div className="grid grid-cols-2 gap-2"><div className="rounded-xl bg-black/20 p-3"><p className="text-[10px] text-white/45">Всего кликов</p><p className="mt-1 text-xl font-black tabular-nums">{clicker.clicks_total.toLocaleString("ru-RU")}</p></div><div className="rounded-xl bg-black/20 p-3"><p className="text-[10px] text-white/45">Заработано в кликере</p><p className="mt-1 text-xl font-black tabular-nums">{clicker.earned_total.toLocaleString("ru-RU")} SC</p></div></div>
-                <div className="rounded-xl border border-white/10 bg-black/20 p-4"><div className="flex items-center justify-between gap-2"><b>Улучшение клика</b><span className="text-xs text-cyan-100">Уровень {clicker.level}/20</span></div><p className="mt-2 text-xs leading-5 text-white/55">Каждый уровень добавляет +1 SnowCoin за нажатие. Чем выше уровень, тем дороже следующее улучшение.</p><button type="button" onClick={() => void upgradeClicker()} disabled={!user || busy !== null || clicker.next_upgrade_cost === null || balance < (clicker.next_upgrade_cost ?? 0)} className="mt-3 w-full rounded-xl bg-cyan-200 px-4 py-3 text-sm font-black text-slate-950 disabled:opacity-40">{clicker.next_upgrade_cost === null ? "Максимальный уровень" : `Улучшить · ${clicker.next_upgrade_cost} SC`}</button></div>
+                <div className="rounded-xl border border-white/10 bg-black/20 p-4"><div className="flex items-center justify-between gap-2"><b>Центр улучшений</b><span className="text-xs text-cyan-100">8 веток · 40 уровней</span></div><p className="mt-2 text-xs leading-5 text-white/55">Прокачивай разные свойства снежного кликера. Каждая ветка имеет 40 уровней и собственную стоимость.</p><div className="mt-3 grid gap-2">{(clicker.upgrades??[]).map((upgrade)=><article key={upgrade.upgrade_key} className="rounded-xl border border-white/10 bg-white/[0.035] p-3"><div className="flex items-start gap-2"><span className="text-2xl">{upgrade.icon}</span><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><b className="text-sm">{upgrade.title}</b><span className="shrink-0 text-xs text-cyan-100">{upgrade.level}/40</span></div><p className="mt-1 text-[11px] text-white/50">{upgrade.description}</p><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-cyan-200" style={{width:(upgrade.level/40*100)+"%"}}/></div><button type="button" onClick={()=>void upgradeClicker(upgrade.upgrade_key)} disabled={!user||busy!==null||upgrade.next_cost===null||balance<upgrade.next_cost} className="mt-2 w-full rounded-lg bg-cyan-200 px-3 py-2 text-xs font-black text-slate-950 disabled:opacity-40">{upgrade.next_cost===null?"Максимум · 40/40":"Улучшить · "+upgrade.next_cost.toLocaleString("ru-RU")+" SC"}</button></div></div></article>)}{!(clicker.upgrades??[]).length&&<p className="text-xs text-white/40">Загружаем улучшения…</p>}</div></div></div>
               </div>
             </div>
           </section>
