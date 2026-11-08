@@ -52,7 +52,7 @@ export default function WinterFestPage() {
   const [now, setNow] = useState(() => new Date());
   const [user, setUser] = useState<User | null>(null);
   const [balance, setBalance] = useState(0);
-  const [clicker, setClicker] = useState<ClickerState>({level:1,clicks_total:0,earned_total:0,click_power:1,next_upgrade_cost:null,upgrades:[]});
+  const [clicker, setClicker] = useState<ClickerState>({level:0,clicks_total:0,earned_total:0,click_power:1,next_upgrade_cost:null,upgrades:[]});
   const [memoryDeck,setMemoryDeck]=useState(()=>["❄️","🎄","🎁","⛄","🎄","❄️","🐧","🎁","🐧","⛄"].sort(()=>Math.random()-.5));
   const [memoryPicks,setMemoryPicks]=useState<number[]>([]);
   const [memoryMatches,setMemoryMatches]=useState<number[]>([]);
@@ -281,7 +281,7 @@ export default function WinterFestPage() {
             </div>
           </section>
 
-                    {clicker.level>=20&&<div className="mt-4 flex items-center gap-3 rounded-2xl border border-amber-200/30 bg-gradient-to-r from-amber-200/15 to-yellow-100/5 p-4"><span className="text-4xl">🏆</span><div><b className="text-amber-100">Трофей: Легенда снежного клика</b><p className="mt-1 text-xs text-white/60">Эксклюзивный легендарный значок автоматически добавлен в коллекцию.</p></div></div>}
+                    {clicker.level>=320&&<div className="mt-4 flex items-center gap-3 rounded-2xl border border-amber-200/30 bg-gradient-to-r from-amber-200/15 to-yellow-100/5 p-4"><span className="text-4xl">🏆</span><div><b className="text-amber-100">Трофей: Легенда снежного клика</b><p className="mt-1 text-xs text-white/60">Эксклюзивный легендарный значок автоматически добавлен в коллекцию.</p></div></div>}
           <section className="mt-8 rounded-[2rem] border border-violet-200/20 bg-gradient-to-br from-[#211a3d] via-[#1b2946] to-[#103b46] p-5 shadow-xl sm:p-7">
             <div className="mb-5"><p className="text-xs font-bold uppercase tracking-[.25em] text-violet-200/70">02 · Snow Arcade</p><h2 className="mt-1 text-2xl font-black">Зимняя игровая зона</h2><p className="mt-1 text-sm text-white/55">Три мини-игры, чтобы отвлечься от сбора монет.</p></div>
             <div className="grid gap-4 lg:grid-cols-3">
