@@ -252,8 +252,8 @@ end;
 $$;
 
 create or replace function public.winter_world_state()
-returns jsonb language sql security invoker set search_path = ''
-as $$ select private.winter_world_state(); $$;
+returns jsonb language sql security definer set search_path = ''
+as $ select private.winter_world_state(); $;
 
 create or replace function public.winter_claim_world_event()
 returns jsonb language sql security invoker set search_path = ''
@@ -268,11 +268,10 @@ returns jsonb language sql security invoker set search_path = ''
 as $$ select private.winter_claim_world_goal_reward(); $$;
 
 revoke all on function private.winter_world_ensure_goal(date) from public, anon, authenticated;
-revoke all on function private.winter_world_state() from public;
+revoke all on function private.winter_world_state() from public, anon, authenticated;
 revoke all on function private.winter_claim_world_event() from public, anon;
 revoke all on function private.winter_contribute_world_goal(integer) from public, anon;
 revoke all on function private.winter_claim_world_goal_reward() from public, anon;
-grant execute on function private.winter_world_state() to anon, authenticated;
 grant execute on function private.winter_claim_world_event() to authenticated;
 grant execute on function private.winter_contribute_world_goal(integer) to authenticated;
 grant execute on function private.winter_claim_world_goal_reward() to authenticated;
