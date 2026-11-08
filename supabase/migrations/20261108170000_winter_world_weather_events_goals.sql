@@ -68,7 +68,6 @@ $$;
 create or replace function private.winter_world_state()
 returns jsonb
 language plpgsql
-stable
 security definer
 set search_path = ''
 as $$
@@ -253,7 +252,7 @@ end;
 $$;
 
 create or replace function public.winter_world_state()
-returns jsonb language sql stable security invoker set search_path = ''
+returns jsonb language sql security invoker set search_path = ''
 as $$ select private.winter_world_state(); $$;
 
 create or replace function public.winter_claim_world_event()
