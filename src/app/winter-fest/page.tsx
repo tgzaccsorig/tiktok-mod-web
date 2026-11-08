@@ -132,7 +132,7 @@ export default function WinterFestPage() {
         setAutoClicker({snowmen:[],income_per_minute:0,collected:0,balance:0});
         return;
       }
-      const [wallet, userClaims, inventory, worn, questProgress, history, clickerState] = await Promise.all([
+      const [wallet, userClaims, inventory, worn, questProgress, history, clickerState, autoClickerState] = await Promise.all([
         supabase.from("winter_wallets").select("balance").eq("user_id", currentUser.id).maybeSingle(),
         supabase.from("winter_advent_claims").select("day").eq("user_id", currentUser.id),
         supabase.from("winter_inventory").select("item_slug").eq("user_id", currentUser.id),
