@@ -24,11 +24,11 @@ test("shared goal progress is clamped and safe for invalid targets", () => {
 
 test("world migration keeps server writes protected and SQL quoting balanced", () => {
   const sql = readFileSync("supabase/migrations/20261108170000_winter_world_weather_events_goals.sql", "utf8");
-  const quoteCount = (sql.match(/\\$\\$/g) ?? []).length;
+  const quoteCount = sql.split("$").length - 1;
   assert.equal(quoteCount % 2, 0);
-  assert.match(sql, /alter table public\\.winter_world_goal_contributions enable row level security/i);
-  assert.match(sql, /create or replace function public\\.winter_world_state\\(\\)[\\s\\S]*?security definer/i);
-  assert.match(sql, /revoke all on function private\\.winter_world_state\\(\\) from public, anon, authenticated/i);
-  assert.match(sql, /grant execute on function public\\.winter_world_state\\(\\) to anon, authenticated/i);
-  assert.doesNotMatch(sql, /returns jsonb\\s+language plpgsql\\s+stable/i);
+  assert.ok(sql.includes("alter table public.winter_world_goal_contributions enable row level security"));
+  assert.ok(sql.includes("create or replace function public.winter_world_state()\nreturns jsonb language sql security definer"));
+  assert.ok(sql.includes("revoke all on function private.winter_world_state() from public, anon, authenticated"));
+  assert.ok(sql.includes("grant execute on function public.winter_world_state() to anon, authenticated"));
+  assert.equal(sql.includes("returns jsonb\nlanguage plpgsql\nstable"), false);
 });
