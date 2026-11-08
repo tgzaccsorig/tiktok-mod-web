@@ -15,6 +15,8 @@ type Competition = { slug: string; title: string; description: string; status: s
 type Entry = { id: string; competition_slug: string; user_id: string; video_url: string; created_at: string; profile?: { username: string; display_name: string | null } | null };
 type ClickerUpgrade = { upgrade_key:string; title:string; description:string; icon:string; base_cost:number; power_per_level:number; level:number; next_cost:number|null };
 type ClickerState = { level: number; clicks_total: number; earned_total: number; click_power: number; next_upgrade_cost: number | null; upgrades?: ClickerUpgrade[] };
+type Snowman = { snowman_key:string; title:string; description:string; icon:string; level:number; max_level:number; next_cost:number|null; income_per_minute:number };
+type AutoClickerState = { snowmen:Snowman[]; income_per_minute:number; collected:number; balance:number };
 const WINTER_QUIZ = [{q:"Как называется северное сияние?",a:["Аврора","Комета","Метель"],correct:0},{q:"Какое дерево украшают на Новый год?",a:["Берёза","Ель","Клён"],correct:1},{q:"Из чего лепят снеговика?",a:["Из песка","Из снега","Из листьев"],correct:1}];
 
 function helsinkiDate(date = new Date()) {
@@ -34,7 +36,9 @@ function questCycle(cadence: string) {
   return "event";
 }
 function errorMessage(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error ?? "");
+  const message = error && typeof error === "object" && "message" in error
+    ? String((error as {message?:unknown}).message ?? "")
+    : error instanceof Error ? error.message : String(error ?? "");
   if (message.includes("event_not_started")) return "Событие ещё не началось.";
   if (message.includes("already_claimed")) return "Эта награда уже получена.";
   if (message.includes("advent_day_locked")) return "Этот день пока закрыт.";
@@ -43,6 +47,9 @@ function errorMessage(error: unknown) {
   if (message.includes("quest_not_ready")) return "Задание ещё не выполнено или награда уже получена.";
   if (message.includes("click_too_fast")) return "Не так быстро! Кликни ещё раз через мгновение.";
   if (message.includes("clicker_max_level")) return "Кликер уже прокачан до максимального уровня.";
+  if (message.includes("snowman_max_level")) return "Этот снеговик уже достиг максимального уровня.";
+  if (message.includes("snowman_not_found")) return "Такого снеговика больше нет в магазине.";
+  if (message.includes("23505") || message.includes("duplicate key")) return "Эта операция уже была учтена. Обнови страницу и попробуй ещё раз.";
   return "Не удалось выполнить действие. Попробуй ещё раз.";
 }
 
@@ -53,6 +60,7 @@ export default function WinterFestPage() {
   const [user, setUser] = useState<User | null>(null);
   const [balance, setBalance] = useState(0);
   const [clicker, setClicker] = useState<ClickerState>({level:0,clicks_total:0,earned_total:0,click_power:1,next_upgrade_cost:null,upgrades:[]});
+  const [autoClicker, setAutoClicker] = useState<AutoClickerState>({snowmen:[],income_per_minute:0,collected:0,balance:0});
   const [memoryDeck,setMemoryDeck]=useState(()=>["❄️","🎄","🎁","⛄","🎄","❄️","🐧","🎁","🐧","⛄"].sort(()=>Math.random()-.5));
   const [memoryPicks,setMemoryPicks]=useState<number[]>([]);
   const [memoryMatches,setMemoryMatches]=useState<number[]>([]);
@@ -121,6 +129,7 @@ export default function WinterFestPage() {
       if (!currentUser) {
         setBalance(0); setClaims([]); setOwned([]); setEquipped({}); setProgress([]); setLedger([]);
         setClicker({level:1,clicks_total:0,earned_total:0,click_power:1,next_upgrade_cost:null,upgrades:[]});
+        setAutoClicker({snowmen:[],income_per_minute:0,collected:0,balance:0});
         return;
       }
       const [wallet, userClaims, inventory, worn, questProgress, history, clickerState] = await Promise.all([
@@ -131,11 +140,14 @@ export default function WinterFestPage() {
         supabase.from("winter_quest_progress").select("quest_slug,cycle_key,progress,completed_at,claimed_at").eq("user_id", currentUser.id),
         supabase.from("winter_coin_ledger").select("amount,reason,created_at").eq("user_id", currentUser.id).order("created_at", { ascending: false }).limit(12),
         supabase.rpc("winter_clicker_state"),
+        supabase.rpc("winter_auto_clicker_state"),
       ]);
-      const privateError = [wallet,userClaims,inventory,worn,questProgress,history,clickerState].find((result) => result.error)?.error;
+      const privateError = [wallet,userClaims,inventory,worn,questProgress,history,clickerState,autoClickerState].find((result) => result.error)?.error;
       if (privateError) throw privateError;
-      setBalance(wallet.data?.balance ?? 0);
+      const autoState = autoClickerState.data as AutoClickerState;
+      setBalance(autoState?.balance ?? wallet.data?.balance ?? 0);
       setClicker(clickerState.data as ClickerState);
+      setAutoClicker(autoState);
       setClaims((userClaims.data ?? []).map((row) => row.day));
       setOwned((inventory.data ?? []).map((row) => row.item_slug));
       setEquipped(Object.fromEntries((worn.data ?? []).map((row) => [row.slot, row.item_slug])));
@@ -217,6 +229,34 @@ export default function WinterFestPage() {
     finally { setBusy(null); }
   };
 
+  const upgradeSnowman = async (snowmanKey:string) => {
+    if (!supabase || !user || busy) { if (!user) setError("Войди в аккаунт, чтобы нанять снеговиков."); return; }
+    setBusy("snowman-upgrade"); setError(""); setMessage("");
+    try {
+      const {error:rpcError}=await supabase.rpc("winter_auto_clicker_upgrade",{p_snowman_key:snowmanKey});
+      if(rpcError) throw rpcError;
+      const {data,error:stateError}=await supabase.rpc("winter_auto_clicker_state");
+      if(stateError) throw stateError;
+      const next=data as AutoClickerState;
+      setAutoClicker(next); setBalance(next.balance);
+      setMessage("Снеговик улучшен! Его автоматический доход вырос.");
+    } catch(e) { setError(errorMessage(e)); }
+    finally { setBusy(null); }
+  };
+
+  const collectSnowmen = async () => {
+    if (!supabase || !user || busy) return;
+    setBusy("snowman-collect"); setError(""); setMessage("");
+    try {
+      const {data,error:stateError}=await supabase.rpc("winter_auto_clicker_state");
+      if(stateError) throw stateError;
+      const next=data as AutoClickerState;
+      setAutoClicker(next); setBalance(next.balance);
+      setMessage(next.collected>0 ? `Снеговики принесли +${next.collected} SnowCoins!` : "Снеговики пока копят монеты. Загляни чуть позже!");
+    } catch(e) { setError(errorMessage(e)); }
+    finally { setBusy(null); }
+  };
+
   const pickMemoryCard=(index:number)=>{if(memoryMatches.includes(index)||memoryPicks.includes(index))return;if(memoryPicks.length>=2){setMemoryPicks([index]);return;}const next=[...memoryPicks,index];setMemoryPicks(next);if(next.length===2&&memoryDeck[next[0]]===memoryDeck[next[1]]){setMemoryMatches(old=>[...old,...next]);setMemoryPicks([]);}};
   const resetMemory=()=>{setMemoryDeck(["❄️","🎄","🎁","⛄","🎄","❄️","🐧","🎁","🐧","⛄"].sort(()=>Math.random()-.5));setMemoryPicks([]);setMemoryMatches([]);};
   const answerQuiz=(answer:number)=>{if(quizDone)return;if(answer===WINTER_QUIZ[quizIndex].correct)setQuizScore(v=>v+1);if(quizIndex===2)setQuizDone(true);else setQuizIndex(v=>v+1);};
@@ -282,6 +322,26 @@ export default function WinterFestPage() {
           </section>
 
                     {clicker.level>=320&&<div className="mt-4 flex items-center gap-3 rounded-2xl border border-amber-200/30 bg-gradient-to-r from-amber-200/15 to-yellow-100/5 p-4"><span className="text-4xl">🏆</span><div><b className="text-amber-100">Трофей: Легенда снежного клика</b><p className="mt-1 text-xs text-white/60">Эксклюзивный легендарный значок автоматически добавлен в коллекцию.</p></div></div>}
+          <section className="mt-6 overflow-hidden rounded-[2rem] border border-sky-200/20 bg-gradient-to-br from-[#19364a] via-[#1c3c50] to-[#29314f] p-5 shadow-xl sm:p-7">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div><p className="text-xs font-bold uppercase tracking-[0.25em] text-sky-200/75">Snowman Auto Crew</p><h2 className="mt-1 text-2xl font-black">⛄ Бригада снеговиков</h2><p className="mt-1 max-w-xl text-sm text-white/60">Нанимай снеговиков, повышай их уровни и получай монеты автоматически. Доход копится, пока тебя нет на сайте, максимум за 12 часов.</p></div>
+              <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-right"><p className="text-[10px] uppercase tracking-widest text-white/45">Доход в минуту</p><p className="text-2xl font-black text-sky-100">+{autoClicker.income_per_minute} SC</p></div>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {autoClicker.snowmen.map((snowman)=><article key={snowman.snowman_key} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                <div className="flex items-center gap-3"><span className="grid h-14 w-14 place-items-center rounded-xl bg-sky-100/10 text-3xl">{snowman.icon}</span><div className="min-w-0"><b>{snowman.title}</b><p className="text-xs text-white/45">Уровень {snowman.level}/{snowman.max_level}</p></div></div>
+                <p className="mt-3 min-h-9 text-xs leading-5 text-white/55">{snowman.description}</p>
+                <p className="mt-2 text-sm font-bold text-sky-100">+{snowman.income_per_minute} SC/мин</p>
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-sky-200" style={{width:(snowman.level/snowman.max_level*100)+"%"}}/></div>
+                <button type="button" onClick={()=>void upgradeSnowman(snowman.snowman_key)} disabled={!user||busy!==null||snowman.next_cost===null||balance<snowman.next_cost} className="mt-3 w-full rounded-lg bg-sky-200 px-3 py-2 text-xs font-black text-slate-950 disabled:opacity-40">{snowman.next_cost===null?"Максимум достигнут":"Нанять / улучшить · "+snowman.next_cost.toLocaleString("ru-RU")+" SC"}</button>
+              </article>)}
+            </div>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/15 p-3">
+              <p className="text-xs text-white/55">Снеговики продолжают работать между посещениями. Накопленный доход: до 12 часов.</p>
+              <button type="button" onClick={()=>void collectSnowmen()} disabled={!user||busy!==null} className="rounded-lg border border-sky-100/30 bg-sky-100/10 px-4 py-2 text-xs font-bold text-sky-100 disabled:opacity-40">{busy==="snowman-collect"?"Собираем...":"Забрать накопленные монеты"}</button>
+            </div>
+          </section>
+
           <section className="mt-8 rounded-[2rem] border border-violet-200/20 bg-gradient-to-br from-[#211a3d] via-[#1b2946] to-[#103b46] p-5 shadow-xl sm:p-7">
             <div className="mb-5"><p className="text-xs font-bold uppercase tracking-[.25em] text-violet-200/70">02 · Snow Arcade</p><h2 className="mt-1 text-2xl font-black">Зимняя игровая зона</h2><p className="mt-1 text-sm text-white/55">Три мини-игры, чтобы отвлечься от сбора монет.</p></div>
             <div className="grid gap-4 lg:grid-cols-3">
