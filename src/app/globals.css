@@ -181,3 +181,17 @@ body {
 [data-theme="light"] .winter-page > div > section:not(:first-of-type) :is(h2,h3,b) { color:#171923 !important; }
 [data-theme="light"] .winter-page > div > section:not(:first-of-type) :is(p,span,label) { color:#596273 !important; }
 [data-theme="light"] .winter-page > div > section:not(:first-of-type) article { background:#fff !important; border-color:rgba(25,35,50,.12) !important; }
+
+
+/* Winter Fest atmospheric decorations */
+.winter-snow-decor { position:fixed; inset:0; z-index:0; overflow:hidden; pointer-events:none; opacity:.55; }
+.winter-snow-decor span { position:absolute; top:-8vh; color:#c9f6ff; font-size:clamp(18px,3vw,34px); text-shadow:0 0 18px rgba(125,211,252,.75); animation:winter-fall 18s linear infinite; }
+.winter-snow-decor span:nth-child(1){left:8%;animation-delay:-3s}
+.winter-snow-decor span:nth-child(2){left:28%;font-size:18px;animation-delay:-12s;animation-duration:23s}
+.winter-snow-decor span:nth-child(3){left:56%;animation-delay:-7s;animation-duration:20s}
+.winter-snow-decor span:nth-child(4){left:76%;font-size:16px;animation-delay:-15s;animation-duration:25s}
+.winter-snow-decor span:nth-child(5){left:92%;animation-delay:-5s;animation-duration:21s}
+@keyframes winter-fall { 0%{transform:translate3d(0,-10vh,0) rotate(0);opacity:0} 12%{opacity:.8} 88%{opacity:.7} 100%{transform:translate3d(35px,115vh,0) rotate(300deg);opacity:0} }
+.winter-hero { box-shadow:0 24px 90px rgba(8,145,178,.12),inset 0 1px rgba(255,255,255,.08); }
+.winter-hero:after { content:"";position:absolute;inset:0;pointer-events:none;border-radius:inherit;background:linear-gradient(115deg,transparent 15%,rgba(255,255,255,.05) 48%,transparent 75%); }
+@media (prefers-reduced-motion:reduce){.winter-snow-decor span{animation:none;top:8%}}
