@@ -177,7 +177,12 @@ export default function WinterFestPage() {
         setAutoClicker((previous) => ({...previous,snowmen:previous.snowmen?.length ? previous.snowmen : DEFAULT_SNOWMEN}));
         if (!clickerState.error) setError("Не удалось загрузить состояние снеговиков. Карточки оставлены на экране; обнови страницу для синхронизации.");
       } else {
-        setAutoClicker({...autoState,snowmen:Array.isArray(autoState?.snowmen) && autoState.snowmen.length ? autoState.snowmen : DEFAULT_SNOWMEN});
+        setAutoClicker({
+          snowmen: Array.isArray(autoState?.snowmen) && autoState.snowmen.length ? autoState.snowmen : DEFAULT_SNOWMEN,
+          income_per_minute: autoState?.income_per_minute ?? 0,
+          collected: autoState?.collected ?? 0,
+          balance: autoState?.balance ?? wallet.data?.balance ?? 0,
+        });
       }
       setClaims((userClaims.data ?? []).map((row) => row.day));
       setOwned((inventory.data ?? []).map((row) => row.item_slug));
