@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabase";
 import { useStore } from "@/hooks/useStore";
@@ -15,7 +15,7 @@ type Competition = { slug: string; title: string; description: string; status: s
 type Entry = { id: string; competition_slug: string; user_id: string; video_url: string; created_at: string; profile?: { username: string; display_name: string | null } | null };
 type ClickerUpgrade = { upgrade_key:string; title:string; description:string; icon:string; base_cost:number; power_per_level:number; level:number; next_cost:number|null };
 type ClickerState = { level: number; clicks_total: number; earned_total: number; click_power: number; next_upgrade_cost: number | null; upgrades?: ClickerUpgrade[] };
-type Snowman = { snowman_key:string; title:string; description:string; icon:string; level:number; max_level:number; next_cost:number|null; income_per_minute:number };
+type Snowman = { snowman_key:string; title:string; description:string; icon:string; base_cost:number; income_per_level:number; level:number; max_level:number; next_cost:number|null; income_per_minute:number };
 type AutoClickerState = { snowmen:Snowman[]; income_per_minute:number; collected:number; balance:number };
 const WINTER_QUIZ = [{q:"Как называется северное сияние?",a:["Аврора","Комета","Метель"],correct:0},{q:"Какое дерево украшают на Новый год?",a:["Берёза","Ель","Клён"],correct:1},{q:"Из чего лепят снеговика?",a:["Из песка","Из снега","Из листьев"],correct:1}];
 
@@ -82,6 +82,7 @@ export default function WinterFestPage() {
   const [entryUrls, setEntryUrls] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const upgradeLockRef = useRef(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -214,34 +215,56 @@ export default function WinterFestPage() {
   };
 
   const upgradeClicker = async (upgradeKey:string) => {
-    if (!supabase || !user || busy) { if (!user) setError("Войди в аккаунт, чтобы прокачать кликер."); return; }
-    setBusy("clicker-upgrade"); setError(""); setMessage("");
+    if (!supabase || !user || upgradeLockRef.current) { if (!user) setError("Войди в аккаунт, чтобы прокачать кликер."); return; }
+    upgradeLockRef.current=true; setBusy("clicker-upgrade"); setError(""); setMessage("");
     try {
-      const {data,error:rpcError} = await supabase.rpc("winter_clicker_upgrade",{p_upgrade_key:upgradeKey});
-      if (rpcError) throw rpcError;
-      const result = data as {balance:number};
+      const request = supabase.rpc("winter_clicker_upgrade",{p_upgrade_key:upgradeKey});
+      const timed = await Promise.race([
+        request,
+        new Promise<never>((_,reject)=>window.setTimeout(()=>reject(new Error("timeout")),12000))
+      ]);
+      if (timed.error) throw timed.error;
+      const result = timed.data as {upgrade_key:string;level:number;balance:number};
       setBalance(result.balance);
-      const {data:state,error:stateError}=await supabase.rpc("winter_clicker_state");
-      if(stateError) throw stateError;
-      setClicker(state as ClickerState);
+      setClicker(previous=>{
+        const upgrades=(previous.upgrades??[]).map(upgrade=>{
+          if(upgrade.upgrade_key!==upgradeKey) return upgrade;
+          const level=result.level;
+          return {...upgrade,level,next_cost:level>=40?null:Math.ceil(upgrade.base_cost*Math.pow(level+1,1.45))};
+        });
+        const upgraded=previous.upgrades?.find(upgrade=>upgrade.upgrade_key===upgradeKey);
+        return {...previous,level:previous.level+1,click_power:previous.click_power+(upgraded?.power_per_level??0),upgrades};
+      });
       setMessage("Улучшение установлено! Сила сбора выросла.");
-    } catch (e) { setError(errorMessage(e)); }
-    finally { setBusy(null); }
+    } catch (e) { setError(e instanceof Error && e.message==="timeout" ? "Сервер долго отвечает. Обнови страницу и проверь баланс — операция могла завершиться." : errorMessage(e)); }
+    finally { upgradeLockRef.current=false; setBusy(null); }
   };
 
   const upgradeSnowman = async (snowmanKey:string) => {
-    if (!supabase || !user || busy) { if (!user) setError("Войди в аккаунт, чтобы нанять снеговиков."); return; }
-    setBusy("snowman-upgrade"); setError(""); setMessage("");
+    if (!supabase || !user || upgradeLockRef.current) { if (!user) setError("Войди в аккаунт, чтобы нанять снеговиков."); return; }
+    upgradeLockRef.current=true; setBusy("snowman-upgrade"); setError(""); setMessage("");
     try {
-      const {error:rpcError}=await supabase.rpc("winter_auto_clicker_upgrade",{p_snowman_key:snowmanKey});
-      if(rpcError) throw rpcError;
-      const {data,error:stateError}=await supabase.rpc("winter_auto_clicker_state");
-      if(stateError) throw stateError;
-      const next=data as AutoClickerState;
-      setAutoClicker(next); setBalance(next.balance);
+      const request=supabase.rpc("winter_auto_clicker_upgrade",{p_snowman_key:snowmanKey});
+      const result=await Promise.race([
+        request,
+        new Promise<never>((_,reject)=>window.setTimeout(()=>reject(new Error("timeout")),12000))
+      ]);
+      if(result.error) throw result.error;
+      const upgraded=result.data as {snowman_key:string;level:number;balance:number};
+      setBalance(upgraded.balance);
+      setAutoClicker(previous=>{
+        const snowmen=previous.snowmen.map(snowman=>{
+          if(snowman.snowman_key!==snowmanKey) return snowman;
+          const level=upgraded.level;
+          return {...snowman,level,income_per_minute:level*snowman.income_per_level,
+            next_cost:level>=snowman.max_level?null:Math.ceil(snowman.base_cost*Math.pow(level+1,1.6))};
+        });
+        const income_per_minute=snowmen.reduce((sum,snowman)=>sum+snowman.income_per_minute,0);
+        return {...previous,snowmen,income_per_minute,balance:upgraded.balance};
+      });
       setMessage("Снеговик улучшен! Его автоматический доход вырос.");
-    } catch(e) { setError(errorMessage(e)); }
-    finally { setBusy(null); }
+    } catch(e) { setError(e instanceof Error && e.message==="timeout" ? "Сервер долго отвечает. Обнови страницу и проверь баланс — операция могла завершиться." : errorMessage(e)); }
+    finally { upgradeLockRef.current=false; setBusy(null); }
   };
 
   const collectSnowmen = async () => {
