@@ -57,6 +57,12 @@ export default function WinterWorldPage() {
         preview = !!settings?.test_mode && String(settings?.test_date ?? "") >= "2026-12-20";
       }
       setTestPreview(preview);
+      if (currentUser) {
+        const { data: wallet, error: walletError } = await supabase
+          .from("winter_wallets").select("balance").eq("user_id", currentUser.id).maybeSingle();
+        if (walletError) throw walletError;
+        setBalance(wallet?.balance ?? 0);
+      } else setBalance(0);
       const { data, error: stateError } = await supabase.rpc("winter_world_state");
       if (stateError) throw stateError;
       setWorld(data as WorldState);
