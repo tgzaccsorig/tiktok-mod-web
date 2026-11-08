@@ -17,6 +17,23 @@ type ClickerUpgrade = { upgrade_key:string; title:string; description:string; ic
 type ClickerState = { level: number; clicks_total: number; earned_total: number; click_power: number; next_upgrade_cost: number | null; upgrades?: ClickerUpgrade[] };
 type Snowman = { snowman_key:string; title:string; description:string; icon:string; base_cost:number; income_per_level:number; level:number; max_level:number; next_cost:number|null; income_per_minute:number };
 type AutoClickerState = { snowmen:Snowman[]; income_per_minute:number; collected:number; balance:number };
+const DEFAULT_CLICKER_UPGRADES: ClickerUpgrade[] = [
+  {upgrade_key:"power",title:"Сила снежинки",description:"Больше SnowCoins за каждое нажатие",icon:"❄️",base_cost:40,power_per_level:3,level:0,next_cost:40},
+  {upgrade_key:"gloves",title:"Волшебные перчатки",description:"Усиливают каждый клик",icon:"🧤",base_cost:60,power_per_level:2,level:0,next_cost:60},
+  {upgrade_key:"comet",title:"Кометный след",description:"Добавляет бонус к сбору",icon:"☄️",base_cost:90,power_per_level:2,level:0,next_cost:90},
+  {upgrade_key:"crystal",title:"Кристальный фокус",description:"Увеличивает отдачу клика",icon:"💎",base_cost:120,power_per_level:3,level:0,next_cost:120},
+  {upgrade_key:"streak",title:"Снежная серия",description:"Бонус за активные клики",icon:"🔥",base_cost:160,power_per_level:2,level:0,next_cost:160},
+  {upgrade_key:"magnet",title:"Монетный магнит",description:"Притягивает дополнительные монеты",icon:"🧲",base_cost:220,power_per_level:2,level:0,next_cost:220},
+  {upgrade_key:"aurora",title:"Сила авроры",description:"Усиливает общий доход",icon:"🌌",base_cost:300,power_per_level:4,level:0,next_cost:300},
+  {upgrade_key:"crown",title:"Корона зимы",description:"Редкое мощное улучшение",icon:"👑",base_cost:450,power_per_level:5,level:0,next_cost:450},
+];
+const DEFAULT_SNOWMEN: Snowman[] = [
+  {snowman_key:"helper",title:"Снеговик-помощник",description:"Начинает собирать SnowCoins вместо тебя",icon:"⛄",base_cost:120,income_per_level:1,level:0,max_level:25,next_cost:120,income_per_minute:0},
+  {snowman_key:"lantern",title:"Снеговик-фонарщик",description:"Собирает монеты в ночную смену",icon:"🏮",base_cost:450,income_per_level:4,level:0,max_level:25,next_cost:450,income_per_minute:0},
+  {snowman_key:"miner",title:"Снежный шахтёр",description:"Добывает ледяные кристаллы и монеты",icon:"⛏️",base_cost:1400,income_per_level:12,level:0,max_level:25,next_cost:1400,income_per_minute:0},
+  {snowman_key:"polar",title:"Полярный снеговик",description:"Ускоряет сбор благодаря северному сиянию",icon:"🐻‍❄️",base_cost:4200,income_per_level:35,level:0,max_level:25,next_cost:4200,income_per_minute:0},
+  {snowman_key:"captain",title:"Снежный капитан",description:"Командует целой бригадой снеговиков",icon:"🎖️",base_cost:12000,income_per_level:100,level:0,max_level:25,next_cost:12000,income_per_minute:0},
+];
 const WINTER_QUIZ = [{q:"Как называется северное сияние?",a:["Аврора","Комета","Метель"],correct:0},{q:"Какое дерево украшают на Новый год?",a:["Берёза","Ель","Клён"],correct:1},{q:"Из чего лепят снеговика?",a:["Из песка","Из снега","Из листьев"],correct:1}];
 
 function helsinkiDate(date = new Date()) {
@@ -83,6 +100,7 @@ export default function WinterFestPage() {
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const upgradeLockRef = useRef(false);
+  const clickLockRef = useRef(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -143,12 +161,24 @@ export default function WinterFestPage() {
         supabase.rpc("winter_clicker_state"),
         supabase.rpc("winter_auto_clicker_state"),
       ]);
-      const privateError = [wallet,userClaims,inventory,worn,questProgress,history,clickerState,autoClickerState].find((result) => result.error)?.error;
+      const privateError = [wallet,userClaims,inventory,worn,questProgress,history].find((result) => result.error)?.error;
       if (privateError) throw privateError;
-      const autoState = autoClickerState.data as AutoClickerState;
+      const autoState = autoClickerState.data as AutoClickerState | null;
+      const clickerData = clickerState.data as ClickerState | null;
       setBalance(autoState?.balance ?? wallet.data?.balance ?? 0);
-      setClicker(clickerState.data as ClickerState);
-      setAutoClicker(autoState);
+      if (clickerState.error) {
+        setClicker((previous) => ({...previous,upgrades:previous.upgrades?.length ? previous.upgrades : DEFAULT_CLICKER_UPGRADES}));
+        setError("Не удалось получить прогресс улучшений кликера. Сами ветки оставлены на экране — попробуй обновить страницу.");
+      } else {
+        const state = clickerData ?? {level:0,clicks_total:0,earned_total:0,click_power:1,next_upgrade_cost:null};
+        setClicker({...state,upgrades:state.upgrades?.length ? state.upgrades : DEFAULT_CLICKER_UPGRADES});
+      }
+      if (autoClickerState.error) {
+        setAutoClicker((previous) => ({...previous,snowmen:previous.snowmen?.length ? previous.snowmen : DEFAULT_SNOWMEN}));
+        if (!clickerState.error) setError("Не удалось загрузить состояние снеговиков. Карточки оставлены на экране; обнови страницу для синхронизации.");
+      } else {
+        setAutoClicker({...autoState,snowmen:Array.isArray(autoState?.snowmen) && autoState.snowmen.length ? autoState.snowmen : DEFAULT_SNOWMEN});
+      }
       setClaims((userClaims.data ?? []).map((row) => row.day));
       setOwned((inventory.data ?? []).map((row) => row.item_slug));
       setEquipped(Object.fromEntries((worn.data ?? []).map((row) => [row.slot, row.item_slug])));
@@ -202,16 +232,24 @@ export default function WinterFestPage() {
   }, "Награда за задание получена!");
 
   const clickSnowCoin = async () => {
-    if (!supabase || !user || busy) { if (!user) setError("Войди в аккаунт, чтобы собирать SnowCoins."); return; }
-    setBusy("clicker"); setError(""); setMessage("");
+    if (!supabase || !user || busy || clickLockRef.current) { if (!user) setError("Войди в аккаунт, чтобы собирать SnowCoins."); return; }
+    clickLockRef.current=true; setBusy("clicker"); setError(""); setMessage("");
     try {
       const {data,error:rpcError} = await supabase.rpc("winter_clicker_click");
       if (rpcError) throw rpcError;
       const result = data as ClickerState & {balance:number;reward:number};
       setBalance(result.balance);
-      setClicker((previous)=>({...previous,...result,upgrades:previous.upgrades??[]}));
+      setClicker((previous)=>({
+        ...previous,
+        level:result.level ?? previous.level,
+        clicks_total:result.clicks_total ?? previous.clicks_total,
+        earned_total:result.earned_total ?? previous.earned_total,
+        click_power:result.click_power ?? previous.click_power,
+        next_upgrade_cost:result.next_upgrade_cost === undefined ? previous.next_upgrade_cost : result.next_upgrade_cost,
+        upgrades:previous.upgrades?.length ? previous.upgrades : DEFAULT_CLICKER_UPGRADES,
+      }));
     } catch (e) { setError(errorMessage(e)); }
-    finally { setBusy(null); }
+    finally { clickLockRef.current=false; setBusy(null); }
   };
 
   const upgradeClicker = async (upgradeKey:string) => {
@@ -274,7 +312,7 @@ export default function WinterFestPage() {
       const {data,error:stateError}=await supabase.rpc("winter_auto_clicker_state");
       if(stateError) throw stateError;
       const next=data as AutoClickerState;
-      setAutoClicker(next); setBalance(next.balance);
+      setAutoClicker({...next,snowmen:Array.isArray(next?.snowmen) && next.snowmen.length ? next.snowmen : DEFAULT_SNOWMEN}); setBalance(next.balance);
       setMessage(next.collected>0 ? `Снеговики принесли +${next.collected} SnowCoins!` : "Снеговики пока копят монеты. Загляни чуть позже!");
     } catch(e) { setError(errorMessage(e)); }
     finally { setBusy(null); }
