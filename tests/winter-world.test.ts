@@ -28,10 +28,11 @@ test("world migrations keep server writes protected and SQL quoting balanced", (
   const quoteCount = sql.split("$").length - 1;
   assert.equal(quoteCount % 2, 0);
   assert.ok(sql.includes("alter table public.winter_world_goal_contributions enable row level security"));
-  assert.ok(sql.includes("create or replace function public.winter_world_state()\\nreturns jsonb language sql security definer"));
+  assert.ok(sql.includes("create or replace function public.winter_world_state()"));
+  assert.ok(sql.includes("returns jsonb language sql security definer"));
   assert.ok(sql.includes("revoke all on function private.winter_world_state() from public, anon, authenticated"));
   assert.ok(sql.includes("grant execute on function public.winter_world_state() to anon, authenticated"));
   assert.ok(permissions.includes("alter function public.winter_world_state() security invoker"));
   assert.ok(permissions.includes("grant execute on function private.winter_world_state() to anon, authenticated"));
-  assert.equal(sql.includes("returns jsonb\\nlanguage plpgsql\\nstable"), false);
+  assert.equal(sql.includes("stable"), false);
 });
