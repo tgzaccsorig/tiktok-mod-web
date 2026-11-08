@@ -253,7 +253,7 @@ $$;
 
 create or replace function public.winter_world_state()
 returns jsonb language sql security definer set search_path = ''
-as $ select private.winter_world_state(); $;
+as $$ select private.winter_world_state(); $$;
 
 create or replace function public.winter_claim_world_event()
 returns jsonb language sql security invoker set search_path = ''
