@@ -208,7 +208,7 @@ export default function WinterFestPage() {
       if (rpcError) throw rpcError;
       const result = data as ClickerState & {balance:number;reward:number};
       setBalance(result.balance);
-      setClicker(result);
+      setClicker((previous)=>({...previous,...result,upgrades:previous.upgrades??[]}));
     } catch (e) { setError(errorMessage(e)); }
     finally { setBusy(null); }
   };
