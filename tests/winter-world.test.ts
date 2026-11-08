@@ -22,13 +22,16 @@ test("shared goal progress is clamped and safe for invalid targets", () => {
   assert.equal(worldGoalProgress(100, 0), 0);
 });
 
-test("world migration keeps server writes protected and SQL quoting balanced", () => {
-  const sql = readFileSync("supabase/migrations/20261108170000_winter_world_weather_events_goals.sql", "utf8");
+test("world migrations keep server writes protected and SQL quoting balanced", () => {
+  const sql = readFileSync("supabase/migrations/20261108180525_winter_world_weather_events_goals.sql", "utf8");
+  const permissions = readFileSync("supabase/migrations/20261108180536_winter_world_state_invoker_permissions.sql", "utf8");
   const quoteCount = sql.split("$").length - 1;
   assert.equal(quoteCount % 2, 0);
   assert.ok(sql.includes("alter table public.winter_world_goal_contributions enable row level security"));
-  assert.ok(sql.includes("create or replace function public.winter_world_state()\nreturns jsonb language sql security definer"));
+  assert.ok(sql.includes("create or replace function public.winter_world_state()\\nreturns jsonb language sql security definer"));
   assert.ok(sql.includes("revoke all on function private.winter_world_state() from public, anon, authenticated"));
   assert.ok(sql.includes("grant execute on function public.winter_world_state() to anon, authenticated"));
-  assert.equal(sql.includes("returns jsonb\nlanguage plpgsql\nstable"), false);
+  assert.ok(permissions.includes("alter function public.winter_world_state() security invoker"));
+  assert.ok(permissions.includes("grant execute on function private.winter_world_state() to anon, authenticated"));
+  assert.equal(sql.includes("returns jsonb\\nlanguage plpgsql\\nstable"), false);
 });
